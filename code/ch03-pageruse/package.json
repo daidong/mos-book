@@ -1,0 +1,14 @@
+{
+  "name": "lab2_pageruse",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PagerUSE: scenario-based oncall debugging lab with a fake terminal + LLM-backed outputs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

@@ -1,0 +1,48 @@
+# Lab 5 Option A: CPU Throttling Experiment
+# 
+# This pod has a tight CPU limit (100m = 0.1 cores)
+# When you run CPU-intensive work inside, it will be throttled.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cpu-stress
+  labels:
+    app: cpu-stress
+    experiment: throttling
+spec:
+  containers:
+  - name: stress
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"      # 0.1 CPU = 10% of one core
+        memory: "128Mi"
+  restartPolicy: Never
+
+---
+# Higher limit variant for comparison
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cpu-stress-relaxed
+  labels:
+    app: cpu-stress
+    experiment: throttling
+spec:
+  containers:
+  - name: stress
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "500m"      # 0.5 CPU = 50% of one core
+        memory: "128Mi"
+  restartPolicy: Never

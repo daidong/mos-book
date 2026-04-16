@@ -1,0 +1,37 @@
+[book]
+title = "Modern Operating Systems"
+authors = ["Dong Dai"]
+language = "en"
+src = "src"
+description = """
+A free, open-source textbook teaching core OS concepts through modern systems — containers, Kubernetes, distributed consensus, storage engines, and AI agent runtimes. Each chapter pairs theory with hands-on labs producing reproducible measurements.
+"""
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/daidong/mos-book"
+edit-url-template = "https://github.com/daidong/mos-book/edit/main/{path}"
+additional-css = []
+mathjax-support = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
+limit-results = 30
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 1
+boost-paragraph = 1
+expand = true
+heading-split-level = 3
+
+[output.html.print]
+enable = true

@@ -1,0 +1,48 @@
+# Lab 5 Option B: Memory OOM Experiment
+#
+# This pod has a tight memory limit (64Mi)
+# When you allocate more than that, the container will be OOMKilled.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mem-stress
+  labels:
+    app: mem-stress
+    experiment: oom
+spec:
+  containers:
+  - name: stress
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "64Mi"   # Tight limit - will OOM if exceeded
+        cpu: "100m"
+  restartPolicy: Always   # Kubelet will restart after OOM
+
+---
+# Higher limit variant for comparison
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mem-stress-relaxed
+  labels:
+    app: mem-stress
+    experiment: oom
+spec:
+  containers:
+  - name: stress
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"   # More headroom
+        cpu: "100m"
+  restartPolicy: Always

@@ -1,0 +1,38 @@
+# Lab 5 Advanced: Web Server for Latency Measurement
+#
+# A simple nginx pod for measuring request latency under throttling.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-throttled
+  labels:
+    app: web-server
+    experiment: latency
+spec:
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    ports:
+    - containerPort: 80
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "32Mi"
+      limits:
+        cpu: "100m"      # Tight limit
+        memory: "64Mi"
+  restartPolicy: Never
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-throttled
+spec:
+  selector:
+    app: web-server
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP

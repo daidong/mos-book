@@ -1,0 +1,42 @@
+[
+  {
+    "tool": "list_dir",
+    "args": {"path": "."},
+    "_comment": "List current directory"
+  },
+  {
+    "tool": "list_dir",
+    "args": {"path": "./data"},
+    "_comment": "List data directory"
+  },
+  {
+    "tool": "read_file",
+    "args": {"path": "data/sample.txt"},
+    "_comment": "Read a sample file"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "pwd"},
+    "_comment": "Print working directory"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "ls -la data/"},
+    "_comment": "List data directory with details"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "date"},
+    "_comment": "Print current date"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "whoami"},
+    "_comment": "Print current user"
+  },
+  {
+    "tool": "write_file",
+    "args": {"path": "output/result.txt", "content": "Analysis complete.\nResults: OK"},
+    "_comment": "Write output file"
+  }
+]

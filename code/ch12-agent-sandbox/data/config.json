@@ -1,0 +1,13 @@
+{
+  "app_name": "Sample Application",
+  "version": "1.0.0",
+  "settings": {
+    "debug": false,
+    "log_level": "info",
+    "max_connections": 100
+  },
+  "features": {
+    "enable_cache": true,
+    "enable_metrics": true
+  }
+}

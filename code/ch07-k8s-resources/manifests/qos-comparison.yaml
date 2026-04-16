@@ -1,0 +1,64 @@
+# Lab 5: QoS Class Comparison
+#
+# Deploy all three to see how QoS class is computed.
+# kubectl get pods -o custom-columns='NAME:.metadata.name,QOS:.status.qosClass'
+
+---
+# Guaranteed: requests == limits for all resources
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-guaranteed
+  labels:
+    qos-demo: "true"
+spec:
+  containers:
+  - name: main
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"       # Same as request
+        memory: "64Mi"    # Same as request
+  restartPolicy: Never
+
+---
+# Burstable: requests < limits (or partial specification)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-burstable
+  labels:
+    qos-demo: "true"
+spec:
+  containers:
+  - name: main
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        cpu: "50m"        # Lower than limit
+        memory: "32Mi"    # Lower than limit
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+  restartPolicy: Never
+
+---
+# BestEffort: no resources specified
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-besteffort
+  labels:
+    qos-demo: "true"
+spec:
+  containers:
+  - name: main
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    # No resources block at all
+  restartPolicy: Never

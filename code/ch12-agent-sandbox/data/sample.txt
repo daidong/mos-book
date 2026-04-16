@@ -1,0 +1,10 @@
+This is a sample data file for the agent sandbox lab.
+
+It contains some example content that the agent should be
+allowed to read and process.
+
+Line 1: Hello, world!
+Line 2: Testing the sandbox.
+Line 3: This file is safe to read.
+Line 4: The agent can analyze this content.
+Line 5: End of sample file.

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520">
+  <style>
+    .t{font: 20px sans-serif; fill:#111}
+    .h{font: 28px sans-serif; font-weight:700; fill:#111}
+    .s{font: 18px sans-serif; fill:#111}
+    .box{fill:#fff; stroke:#111; stroke-width:2}
+    .ro{fill:#f7f7f7; stroke:#111; stroke-width:2}
+    .rw{fill:#eaffea; stroke:#1a7f37; stroke-width:2}
+    .ov{fill:#e8f0ff; stroke:#1f4b99; stroke-width:2}
+    .arrow{stroke:#111; stroke-width:2; marker-end:url(#m)}
+    .dim{fill:#666; font: 16px sans-serif}
+  </style>
+  <defs>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L10,3 L0,6 Z" fill="#111" />
+    </marker>
+  </defs>
+
+  <text x="30" y="45" class="h">Images as rootfs: overlayfs (copy-on-write)</text>
+  <text x="30" y="80" class="s">A container sees a single merged filesystem view; the host stores layers.</text>
+
+  <!-- layers -->
+  <rect x="80" y="120" width="360" height="80" rx="14" class="ro"/>
+  <text x="105" y="170" class="t">lowerdir: base layer (read-only)</text>
+
+  <rect x="80" y="210" width="360" height="80" rx="14" class="ro"/>
+  <text x="105" y="260" class="t">lowerdir: app deps layer (read-only)</text>
+
+  <rect x="80" y="300" width="360" height="80" rx="14" class="ro"/>
+  <text x="105" y="350" class="t">lowerdir: app layer (read-only)</text>
+
+  <rect x="80" y="390" width="360" height="80" rx="14" class="rw"/>
+  <text x="105" y="440" class="t">upperdir: container writes (read-write)</text>
+
+  <!-- merged -->
+  <rect x="600" y="210" width="420" height="160" rx="14" class="ov"/>
+  <text x="630" y="255" class="h">merged mount</text>
+  <text x="630" y="295" class="t">what the container uses as “/”</text>
+  <text x="630" y="330" class="s">Reads search lowerdirs; writes go to upperdir</text>
+
+  <!-- arrows -->
+  <line x1="440" y1="160" x2="600" y2="250" class="arrow"/>
+  <line x1="440" y1="250" x2="600" y2="270" class="arrow"/>
+  <line x1="440" y1="340" x2="600" y2="290" class="arrow"/>
+  <line x1="440" y1="430" x2="600" y2="330" class="arrow"/>
+
+  <text x="80" y="500" class="dim">Why this design: fast distribution (content-addressed layers) + cheap snapshots (CoW).</text>
+</svg>

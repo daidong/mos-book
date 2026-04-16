@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520">
+  <style>
+    .t{font: 18px sans-serif; fill:#111}
+    .h{font: 28px sans-serif; font-weight:700; fill:#111}
+    .s{font: 20px sans-serif; fill:#111}
+    .box{fill:#fff; stroke:#111; stroke-width:2}
+    .step{fill:#fff3d6; stroke:#a06200; stroke-width:2}
+    .k{fill:#e8f0ff; stroke:#1f4b99; stroke-width:2}
+    .c{fill:#eaffea; stroke:#1a7f37; stroke-width:2}
+    .arrow{stroke:#111; stroke-width:2; marker-end:url(#m)}
+  </style>
+  <defs>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L10,3 L0,6 Z" fill="#111" />
+    </marker>
+  </defs>
+
+  <text x="30" y="45" class="h">What a container runtime does (typical sequence)</text>
+
+  <rect x="60" y="90" width="980" height="70" rx="14" class="k"/>
+  <text x="85" y="135" class="s">Parent (runtime): parse config, prepare rootfs, create cgroup, clone child</text>
+
+  <rect x="60" y="190" width="980" height="250" rx="14" class="box"/>
+  <text x="85" y="225" class="s">Child (container init, becomes PID 1 in new PID namespace)</text>
+
+  <!-- steps -->
+  <rect x="95" y="250" width="170" height="60" rx="12" class="step"/>
+  <text x="110" y="285" class="t">setns/unshare</text>
+  <text x="110" y="307" class="t">(namespaces)</text>
+
+  <rect x="285" y="250" width="170" height="60" rx="12" class="step"/>
+  <text x="300" y="285" class="t">uid_map/gid_map</text>
+  <text x="300" y="307" class="t">(userns)</text>
+
+  <rect x="475" y="250" width="170" height="60" rx="12" class="step"/>
+  <text x="490" y="285" class="t">mount + pivot_root</text>
+  <text x="490" y="307" class="t">+ /proc</text>
+
+  <rect x="665" y="250" width="170" height="60" rx="12" class="step"/>
+  <text x="680" y="285" class="t">drop caps</text>
+  <text x="680" y="307" class="t">seccomp/LSM</text>
+
+  <rect x="855" y="250" width="150" height="60" rx="12" class="c"/>
+  <text x="875" y="285" class="t">execve()</text>
+  <text x="875" y="307" class="t">run app</text>
+
+  <!-- arrows -->
+  <line x1="265" y1="280" x2="285" y2="280" class="arrow"/>
+  <line x1="455" y1="280" x2="475" y2="280" class="arrow"/>
+  <line x1="645" y1="280" x2="665" y2="280" class="arrow"/>
+  <line x1="835" y1="280" x2="855" y2="280" class="arrow"/>
+
+  <text x="85" y="475" class="t">In parallel: parent writes cgroup limits and moves child into cgroup (cgroup.procs).</text>
+</svg>

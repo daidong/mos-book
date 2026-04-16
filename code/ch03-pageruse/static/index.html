@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PagerUSE</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin: 0; background: #0b1020; color: #e7eaf3; }
+      header { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:space-between; }
+      header .title { font-weight: 700; letter-spacing: 0.4px; }
+      header .meta { font-size: 12px; color: rgba(231,234,243,0.8); }
+      main { display: grid; grid-template-columns: 420px 1fr; gap: 14px; padding: 14px; }
+      .card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden; }
+      .card h2 { margin: 0; padding: 12px 14px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); }
+      .card .body { padding: 12px 14px; }
+      .alert { padding: 10px 12px; margin-bottom: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); }
+      .sev1 { background: rgba(255, 60, 60, 0.10); border-color: rgba(255, 60, 60, 0.28); }
+      .sev2 { background: rgba(255, 170, 0, 0.10); border-color: rgba(255, 170, 0, 0.25); }
+      .sev3 { background: rgba(80, 160, 255, 0.10); border-color: rgba(80, 160, 255, 0.25); }
+      .alert .k { font-size: 12px; color: rgba(231,234,243,0.75); }
+      .alert .v { font-size: 13px; margin-top: 4px; white-space: pre-wrap; }
+
+      .row { display: flex; gap: 10px; align-items: center; }
+      select, button, input { background: rgba(255,255,255,0.06); color: #e7eaf3; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 8px 10px; }
+      button { cursor: pointer; }
+      button:hover { background: rgba(255,255,255,0.10); }
+
+      .term { height: 520px; display:flex; flex-direction:column; }
+      .term .out { flex:1; overflow:auto; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.35; }
+      .term .in { border-top: 1px solid rgba(255,255,255,0.08); padding: 10px 12px; display:flex; gap: 10px; align-items:center; }
+      .prompt { color: rgba(231,234,243,0.7); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size: 13px; }
+      .term input { flex:1; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size: 13px; }
+      .line { white-space: pre; }
+      .cmd { color: #9ef0ff; }
+      .err { color: #ff7a7a; }
+
+      .hint { font-size: 12px; color: rgba(231,234,243,0.75); }
+      .small { font-size: 12px; color: rgba(231,234,243,0.75); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <div class="title">PagerUSE — Oncall Training Lab</div>
+        <div class="meta">A simulated incident. Use commands + evidence to explain p99.</div>
+      </div>
+      <div class="row">
+        <label class="small">Scenario</label>
+        <select id="scenarioSelect"></select>
+        <button id="loadBtn">Load</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>Active Alerts</h2>
+        <div class="body" id="alerts"></div>
+      </section>
+
+      <section class="card term">
+        <h2>Terminal</h2>
+        <div class="out" id="termOut"></div>
+        <div class="in">
+          <div class="prompt" id="prompt">student@host:~$</div>
+          <input id="termIn" autocomplete="off" placeholder="Try: top -bn1 | free -m | vmstat 1 5 (pipes not allowed here)" />
+          <button id="sendBtn">Run</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Context</h2>
+        <div class="body">
+          <div id="narrative" class="line"></div>
+          <hr style="border-color: rgba(255,255,255,0.08);" />
+          <div class="hint" id="help"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Student Task</h2>
+        <div class="body">
+          <div class="line">1) Use the USE method to decide what to check.</div>
+          <div class="line">2) Collect at least two independent signals.</div>
+          <div class="line">3) Write an evidence chain explaining the p99 spike.</div>
+          <div class="line">4) Propose a mitigation and what you would verify next.</div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+      const termOut = el('termOut');
+      const termIn = el('termIn');
+      const scenarioSelect = el('scenarioSelect');
+      const loadBtn = el('loadBtn');
+      const sendBtn = el('sendBtn');
+
+      let scenario = null;
+
+      function appendLine(text, cls='line') {
+        const d = document.createElement('div');
+        d.className = cls;
+        d.textContent = text;
+        termOut.appendChild(d);
+        termOut.scrollTop = termOut.scrollHeight;
+      }
+
+      function renderScenario() {
+        el('alerts').innerHTML = '';
+        (scenario.alerts || []).forEach((a) => {
+          const sev = (a.severity || 'sev2').toLowerCase();
+          const box = document.createElement('div');
+          box.className = `alert ${sev}`;
+          box.innerHTML = `
+            <div class="k">${a.service || 'service'} — ${a.name || 'alert'} (${a.severity || 'sev'})</div>
+            <div class="v">${a.summary || ''}</div>
+            <div class="k" style="margin-top:6px;">started: ${a.started || 'unknown'}; affected: ${a.affected || ''}</div>
+          `;
+          el('alerts').appendChild(box);
+        });
+
+        el('narrative').textContent = scenario.narrative || '';
+        el('help').textContent = scenario.terminal?.help || '';
+        el('prompt').textContent = scenario.terminal?.persona?.prompt || 'student@host:~$';
+
+        termOut.innerHTML = '';
+        appendLine(`# Loaded scenario: ${scenario.id} — ${scenario.title}`);
+        appendLine(`# Type 'help' for allowed commands`);
+      }
+
+      async function loadScenario(id) {
+        const r = await fetch(`/api/scenario/${encodeURIComponent(id)}`);
+        const j = await r.json();
+        scenario = j.scenario;
+        renderScenario();
+      }
+
+      async function listScenarios() {
+        const r = await fetch('/api/scenarios');
+        const j = await r.json();
+        scenarioSelect.innerHTML = '';
+        (j.scenarios || []).forEach((id) => {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = id;
+          scenarioSelect.appendChild(opt);
+        });
+      }
+
+      async function runCommand() {
+        if (!scenario) return;
+        const input = termIn.value.trim();
+        if (!input) return;
+
+        appendLine(`${el('prompt').textContent} ${input}`, 'line cmd');
+        termIn.value = '';
+
+        const r = await fetch('/api/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenarioId: scenario.id, input }),
+        });
+
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          appendLine(j.error || 'error', 'line err');
+          if (j.help) appendLine(j.help, 'line');
+          return;
+        }
+        const out = j.output || '';
+        out.split(/\n/).forEach((line) => {
+          if (line.length) appendLine(line);
+        });
+      }
+
+      loadBtn.addEventListener('click', () => loadScenario(scenarioSelect.value));
+      sendBtn.addEventListener('click', runCommand);
+      termIn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') runCommand();
+      });
+
+      (async function init() {
+        await listScenarios();
+        if (scenarioSelect.value) await loadScenario(scenarioSelect.value);
+      })();
+    </script>
+  </body>
+</html>

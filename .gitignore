@@ -1,0 +1,56 @@
+# mdBook output
+book/
+/book
+
+# macOS metadata
+.DS_Store
+._*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Compiled artifacts from labs (rebuilt from source)
+code/**/qs
+code/**/write_latency
+code/**/*.o
+code/**/*.a
+code/**/*.so
+code/ch02-quicksort/outputs/
+code/**/a.out
+
+# Lab result outputs (reproducibility artifacts live in student runs/)
+runs/
+results/
+*.csv.gz
+
+# Build intermediates for PDF / EPUB
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+
+# Generated PDFs (derived from .md)
+*.pdf
+!src/**/*.pdf
+
+# Environment files
+.env
+.env.local

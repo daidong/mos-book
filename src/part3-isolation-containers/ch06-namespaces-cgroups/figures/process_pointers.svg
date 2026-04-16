@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+  <style>
+    .t{font: 20px sans-serif; fill:#111}
+    .h{font: 28px sans-serif; font-weight:700; fill:#111}
+    .s{font: 18px sans-serif; fill:#111}
+    .box{fill:#fff; stroke:#111; stroke-width:2}
+    .k{fill:#e8f0ff; stroke:#1f4b99; stroke-width:2}
+    .n{fill:#fff3d6; stroke:#a06200; stroke-width:2}
+    .c{fill:#eaffea; stroke:#1a7f37; stroke-width:2}
+    .arrow{stroke:#111; stroke-width:2; marker-end:url(#m)}
+    .dim{fill:#666; font: 16px sans-serif}
+  </style>
+  <defs>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L10,3 L0,6 Z" fill="#111" />
+    </marker>
+  </defs>
+
+  <text x="30" y="45" class="h">Why namespaces/cgroups “work”: tasks point to kernel objects</text>
+  <text x="30" y="80" class="s">(Simplified mental model; names match common Linux kernel structures.)</text>
+
+  <!-- task_struct -->
+  <rect x="70" y="140" width="260" height="310" rx="14" class="k"/>
+  <text x="95" y="180" class="h">task_struct</text>
+  <text x="95" y="220" class="t">pid, comm, mm ...</text>
+  <rect x="95" y="250" width="210" height="70" rx="12" class="box"/>
+  <text x="110" y="292" class="t">nsproxy *</text>
+  <rect x="95" y="335" width="210" height="70" rx="12" class="box"/>
+  <text x="110" y="377" class="t">css_set *</text>
+
+  <text x="95" y="430" class="dim">Many syscalls consult current-&gt;nsproxy</text>
+  <text x="95" y="452" class="dim">Schedulers/memcg consult current-&gt;css_set</text>
+
+  <!-- nsproxy -->
+  <rect x="410" y="150" width="290" height="140" rx="14" class="n"/>
+  <text x="430" y="190" class="h">nsproxy</text>
+  <text x="430" y="225" class="t">uts_ns *</text>
+  <text x="430" y="255" class="t">pid_ns *</text>
+  <text x="430" y="285" class="t">mnt_ns *</text>
+
+  <!-- namespaces -->
+  <rect x="760" y="110" width="300" height="210" rx="14" class="n"/>
+  <text x="780" y="150" class="h">Namespace objects</text>
+  <text x="780" y="190" class="t">PID namespace: PID translation, PID 1 rules</text>
+  <text x="780" y="220" class="t">Mount namespace: mount table + propagation</text>
+  <text x="780" y="250" class="t">UTS namespace: hostname/domainname</text>
+  <text x="780" y="280" class="t">… net, ipc, user, cgroup …</text>
+
+  <!-- css_set -->
+  <rect x="410" y="340" width="290" height="120" rx="14" class="c"/>
+  <text x="430" y="380" class="h">css_set</text>
+  <text x="430" y="415" class="t">controller states *</text>
+  <text x="430" y="445" class="s">(cpu, memory, pids, io, …)</text>
+
+  <!-- cgroup tree -->
+  <rect x="760" y="350" width="300" height="170" rx="14" class="c"/>
+  <text x="780" y="390" class="h">Cgroup hierarchy</text>
+  <text x="780" y="425" class="t">limit + accounting + enforcement</text>
+  <text x="780" y="455" class="t">interfaces via cgroupfs files</text>
+
+  <!-- arrows -->
+  <line x1="305" y1="285" x2="410" y2="220" class="arrow"/>
+  <line x1="700" y1="220" x2="760" y2="210" class="arrow"/>
+
+  <line x1="305" y1="370" x2="410" y2="400" class="arrow"/>
+  <line x1="700" y1="400" x2="760" y2="435" class="arrow"/>
+</svg>

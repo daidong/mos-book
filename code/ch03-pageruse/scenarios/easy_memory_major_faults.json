@@ -1,0 +1,105 @@
+{
+  "id": "easy_memory_major_faults",
+  "title": "Order service p99 spike (major faults under memory pressure)",
+  "now": "2026-02-17T02:03:12Z",
+  "host": {
+    "hostname": "ip-10-0-2-15",
+    "os": "Ubuntu 22.04.3 LTS",
+    "kernel": "5.15.0-91-generic",
+    "uptime": "21 days",
+    "cpu": "2 vCPU",
+    "mem": "2 GiB"
+  },
+  "narrative": "2am page: order-service p99 jumped. No deploy. Traffic steady. Only ~1% of requests are slow.",
+  "alerts": [
+    {
+      "severity": "sev2",
+      "service": "order-service",
+      "name": "p99 latency",
+      "summary": "p99 > 500ms for 15 minutes (SLO: 100ms)",
+      "started": "01:47Z",
+      "affected": "~1%"
+    }
+  ],
+  "groundTruth": {
+    "primary": "memory",
+    "mechanism": "major page faults due to tight memory limit + cold working set",
+    "notes": [
+      "Working set recently increased (new feature loads a larger product catalog into memory).",
+      "Container memory limit is near the working set size.",
+      "Reclaim causes pages to be evicted; rare requests touch cold pages and trigger major faults.",
+      "CPU utilization is moderate; tail is mostly waiting for disk/swap IO."
+    ]
+  },
+  "terminal": {
+    "persona": {
+      "prompt": "student@order-host:~$"
+    },
+    "help": "Allowed commands are intentionally limited. Examples:\n  top -bn1\n  free -m\n  vmstat 1 5\n  cat /proc/vmstat\n  grep -E pgmajfault\n  /usr/bin/time -v <cmd> (simulated)\n  dmesg | tail (pipes not allowed; use: dmesg -T)\n\nThis terminal does NOT execute on your machine.",
+    "policy": {
+      "maxLen": 120,
+      "allow": [
+        "help",
+        "date",
+        "uname",
+        "uptime",
+        "whoami",
+        "top",
+        "free",
+        "vmstat",
+        "cat",
+        "grep",
+        "dmesg",
+        "ps",
+        "ss",
+        "journalctl"
+      ],
+      "rules": {
+        "cat": {
+          "regex": "^cat (/proc/(meminfo|vmstat)|/sys/fs/cgroup/[^ ]+/(memory\.current|memory\.max|memory\.events))$",
+          "error": "only a few /proc and cgroup files are available"
+        },
+        "grep": {
+          "regex": "^grep -E [A-Za-z0-9|]+ (/proc/vmstat|/proc/meminfo)$",
+          "error": "grep is only allowed as: grep -E <pattern> /proc/vmstat"
+        },
+        "vmstat": {
+          "regex": "^vmstat( [0-9]+ [0-9]+)?$",
+          "error": "vmstat usage: vmstat 1 5"
+        },
+        "top": {
+          "regex": "^top -bn1$",
+          "error": "top usage: top -bn1"
+        },
+        "free": {
+          "regex": "^free -m$",
+          "error": "free usage: free -m"
+        },
+        "dmesg": {
+          "regex": "^dmesg( -T)?$",
+          "error": "dmesg usage: dmesg -T"
+        }
+      }
+    }
+  },
+  "llm": {
+    "mode": "mock",
+    "model": "gpt-4o-mini",
+    "temperature": 0.2
+  },
+  "commandLibrary": {
+    "help": "Allowed: top -bn1 | free -m | vmstat 1 5 | cat /proc/vmstat | grep -E pgmajfault /proc/vmstat | dmesg -T\nNo pipes, redirects, or quotes.\n",
+
+    "top -bn1": "top - 02:03:12 up 21 days,  3:12,  1 user,  load average: 0.62, 0.71, 0.66\nTasks: 128 total,   1 running, 127 sleeping,   0 stopped,   0 zombie\n%Cpu(s): 18.2 us,  3.1 sy,  0.0 ni, 77.9 id,  0.4 wa,  0.0 hi,  0.4 si,  0.0 st\nMiB Mem :   2048.0 total,     66.0 free,   1648.0 used,    334.0 buff/cache\nMiB Swap:   2048.0 total,   1710.0 free,    338.0 used.  \n\n  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND\n 2110 app       20   0 1420.0m  820.0m  12.0m S  22.0  40.0  12:10.12 order-service\n  911 root      20   0  120.0m   28.0m   8.0m S   2.0   1.4   1:05.55 node-exporter\n",
+
+    "free -m": "               total        used        free      shared  buff/cache   available\nMem:            2048        1648          66          34         334         112\nSwap:           2048         338        1710\n",
+
+    "vmstat 1 5": "procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----\n r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st\n 1  0 346112  67584  18432 319488   8   12   210   120  610  980 18  3 78  1  0\n 0  1 346240  66240  18432 318976  12    8   320   180  590 1005 14  4 80  2  0\n 0  0 346304  65536  18432 318720   4    6   110   140  570  960 10  3 85  2  0\n 1  0 346304  66560  18432 318912  10   14   280   210  600 1020 16  4 78  2  0\n 0  1 346368  65120  18432 318640   6    9   260   190  585  995 12  4 82  2  0\n",
+
+    "cat /proc/vmstat": "pgfault 184120234\npgmajfault 129834\npgpgin 9134231\npgpgout 21034122\npswpin 40982\npswpout 61123\n",
+
+    "grep -E pgmajfault /proc/vmstat": "pgmajfault 129834\n",
+
+    "dmesg -T": "[Mon Feb 17 01:47:12 2026] order-service: tail latency alert fired (p99 > 500ms)\n[Mon Feb 17 01:49:03 2026] Memory cgroup out of memory: Killed process 2311 (warmup-worker) total-vm:402812kB, anon-rss:212340kB, file-rss:0kB, shmem-rss:0kB\n[Mon Feb 17 01:49:03 2026] oom_reaper: reaped process 2311 (warmup-worker), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB\n[Mon Feb 17 01:52:44 2026] order-service: recovered but p99 still spiky\n"
+  }
+}

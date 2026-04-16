@@ -1,0 +1,88 @@
+{
+  "id": "hard_misleading_network",
+  "title": "Checkout p99 spike (looks like network, actually storage tail + retries)",
+  "now": "2026-02-17T04:42:09Z",
+  "host": {
+    "hostname": "ip-10-0-9-10",
+    "os": "Ubuntu 22.04.3 LTS",
+    "kernel": "5.15.0-91-generic",
+    "uptime": "34 days",
+    "cpu": "4 vCPU",
+    "mem": "16 GiB"
+  },
+  "narrative": "checkout-service p99 went to 1.2s. Dashboard suggests network timeouts to payment-service. But deploy history shows a storage config change earlier.",
+  "alerts": [
+    {
+      "severity": "sev2",
+      "service": "checkout-service",
+      "name": "p99 latency",
+      "summary": "p99 > 1.2s for 20 minutes (SLO: 150ms)",
+      "started": "04:20Z",
+      "affected": "~1%"
+    },
+    {
+      "severity": "sev2",
+      "service": "payment-service",
+      "name": "timeout rate",
+      "summary": "Timeouts increased (but payment is healthy)",
+      "started": "04:21Z",
+      "affected": "spiky"
+    }
+  ],
+  "groundTruth": {
+    "primary": "storage",
+    "mechanism": "fsync/writeback tail latency causes occasional 800ms stalls; checkout retries amplify; symptoms appear as network timeouts",
+    "notes": [
+      "A config change enabled synchronous writes for the local queue (fsync per request).",
+      "Disk util is moderate but io latency has heavy tail (await spikes).",
+      "When checkout stalls in fsync, upstream hits timeout and retries; the payment-service looks guilty but isn't.",
+      "Students should notice: real>>user+sys, iowait, and dmesg/journal hints."
+    ]
+  },
+  "terminal": {
+    "persona": {
+      "prompt": "student@checkout-host:~$"
+    },
+    "help": "Try: top -bn1 | vmstat 1 5 | dmesg -T | journalctl -n 20\nAnd compare: real vs user/sys via /usr/bin/time -v (simulated).",
+    "policy": {
+      "maxLen": 140,
+      "allow": [
+        "help",
+        "top",
+        "vmstat",
+        "dmesg",
+        "journalctl",
+        "ss",
+        "ps",
+        "cat",
+        "grep"
+      ],
+      "rules": {
+        "top": { "regex": "^top -bn1$", "error": "top usage: top -bn1" },
+        "vmstat": { "regex": "^vmstat( [0-9]+ [0-9]+)?$", "error": "vmstat usage: vmstat 1 5" },
+        "dmesg": { "regex": "^dmesg -T$", "error": "dmesg usage: dmesg -T" },
+        "journalctl": { "regex": "^journalctl -n [0-9]+$", "error": "journalctl usage: journalctl -n 20" },
+        "cat": { "regex": "^cat (/proc/(diskstats|loadavg)|/var/log/app\.log)$", "error": "cat is limited" },
+        "grep": { "regex": "^grep -E [A-Za-z0-9|]+ (/var/log/app\.log|/proc/loadavg)$", "error": "grep is limited" }
+      }
+    }
+  },
+  "llm": {
+    "mode": "mock",
+    "model": "gpt-4o-mini",
+    "temperature": 0.25
+  },
+  "commandLibrary": {
+    "help": "Allowed: top -bn1 | vmstat 1 5 | dmesg -T | journalctl -n 20 | ss -s\nNo pipes, redirects, or quotes.\n",
+
+    "top -bn1": "top - 04:42:09 up 34 days,  8:17,  1 user,  load average: 1.12, 0.88, 0.71\nTasks: 175 total,   1 running, 174 sleeping,   0 stopped,   0 zombie\n%Cpu(s): 22.0 us,  8.0 sy,  0.0 ni, 60.0 id, 10.0 wa,  0.0 hi,  0.0 si,  0.0 st\nMiB Mem :  16384.0 total,   3420.0 free,   8200.0 used,   4764.0 buff/cache\n\n  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND\n 2101 app       20   0 2600.0m  920.0m  24.0m S   68.0   5.6  44:12.55 checkout-service\n",
+
+    "vmstat 1 5": "procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----\n r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st\n 1  0      0 350000 120000 410000   0    0    40   180  700 1300 20  8 62 10  0\n 0  1      0 349200 120000 409500   0    0    55  1200  720 1600 18  8 64 10  0\n 0  1      0 348800 120000 409000   0    0    60  2500  710 1700 16  7 67 10  0\n 1  1      0 348500 120000 408700   0    0    45   900  690 1500 21  8 60 11  0\n 0  1      0 348200 120000 408300   0    0    58  1800  705 1650 17  8 64 11  0\n",
+
+    "dmesg -T": "[Mon Feb 17 04:20:12 2026] checkout-service: p99 alert fired (p99 > 1.2s)\n[Mon Feb 17 04:22:01 2026] EXT4-fs (nvme0n1p1): warning: mounting with journal_async_commit disabled\n[Mon Feb 17 04:22:01 2026] checkout-service: enabled durable queue (fsync per request)\n",
+
+    "journalctl -n 20": "Feb 17 04:21:10 checkout-host checkout-service[2101]: slow request: queue_commit=812ms payment_rpc=95ms total=1012ms\nFeb 17 04:21:14 checkout-host checkout-service[2101]: slow request: queue_commit=902ms payment_rpc=88ms total=1120ms\nFeb 17 04:21:18 checkout-host checkout-service[2101]: retrying payment rpc after upstream timeout\n",
+
+    "ss -s": "Total: 271 (kernel 0)\nTCP:   152 (estab 54, closed 68, orphaned 0, timewait 68)\nTransport Total     IP        IPv6\n*         0         -         -\nRAW       0         0         0\nUDP       6         5         1\nTCP       84        61        23\nINET      90        66        24\nFRAG      0         0         0\n"
+  }
+}

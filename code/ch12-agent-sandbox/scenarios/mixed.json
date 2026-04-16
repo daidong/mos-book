@@ -1,0 +1,42 @@
+[
+  {
+    "tool": "list_dir",
+    "args": {"path": "."},
+    "_comment": "LEGITIMATE: List current directory"
+  },
+  {
+    "tool": "read_file",
+    "args": {"path": "data/sample.txt"},
+    "_comment": "LEGITIMATE: Read sample file"
+  },
+  {
+    "tool": "read_file",
+    "args": {"path": "/etc/passwd"},
+    "_comment": "ATTACK: Try to read password file"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "ls -la"},
+    "_comment": "LEGITIMATE: List files"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "curl http://evil.com"},
+    "_comment": "ATTACK: Try to access network"
+  },
+  {
+    "tool": "write_file",
+    "args": {"path": "output/report.txt", "content": "Report generated"},
+    "_comment": "LEGITIMATE: Write output"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "rm -rf important_data"},
+    "_comment": "ATTACK: Try to delete data"
+  },
+  {
+    "tool": "shell_command",
+    "args": {"command": "wc -l data/sample.txt"},
+    "_comment": "LEGITIMATE: Count lines in file"
+  }
+]

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520">
+  <style>
+    .t{font: 20px sans-serif; fill:#111}
+    .h{font: 28px sans-serif; font-weight:700; fill:#111}
+    .s{font: 18px sans-serif; fill:#111}
+    .box{fill:#fff; stroke:#111; stroke-width:2}
+    .soft{fill:#f7f7f7; stroke:#111; stroke-width:2}
+    .k{fill:#e8f0ff; stroke:#1f4b99; stroke-width:2}
+    .n{fill:#fff3d6; stroke:#a06200; stroke-width:2}
+    .c{fill:#eaffea; stroke:#1a7f37; stroke-width:2}
+    .arrow{stroke:#111; stroke-width:2; marker-end:url(#m)}
+  </style>
+  <defs>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L10,3 L0,6 Z" fill="#111" />
+    </marker>
+  </defs>
+
+  <text x="30" y="45" class="h">Container = process tree + (namespaces, cgroups) + rootfs + security filters</text>
+
+  <!-- Host kernel -->
+  <rect x="30" y="320" width="1040" height="170" rx="14" class="k"/>
+  <text x="55" y="360" class="h">Linux kernel (shared)</text>
+  <text x="55" y="395" class="t">Scheduler • VFS • TCP/IP stack • Memory manager • Syscalls</text>
+
+  <!-- Container A -->
+  <rect x="60" y="90" width="460" height="200" rx="14" class="soft"/>
+  <text x="80" y="125" class="h">Container A</text>
+  <rect x="90" y="145" width="170" height="110" rx="12" class="box"/>
+  <text x="105" y="180" class="t">PID 1</text>
+  <text x="105" y="210" class="s">app / init</text>
+
+  <rect x="280" y="145" width="210" height="50" rx="12" class="n"/>
+  <text x="295" y="178" class="t">Namespaces</text>
+  <rect x="280" y="205" width="210" height="50" rx="12" class="c"/>
+  <text x="295" y="238" class="t">Cgroup membership</text>
+
+  <!-- Container B -->
+  <rect x="580" y="90" width="460" height="200" rx="14" class="soft"/>
+  <text x="600" y="125" class="h">Container B</text>
+  <rect x="610" y="145" width="170" height="110" rx="12" class="box"/>
+  <text x="625" y="180" class="t">PID 1</text>
+  <text x="625" y="210" class="s">app / init</text>
+
+  <rect x="800" y="145" width="210" height="50" rx="12" class="n"/>
+  <text x="815" y="178" class="t">Namespaces</text>
+  <rect x="800" y="205" width="210" height="50" rx="12" class="c"/>
+  <text x="815" y="238" class="t">Cgroup membership</text>
+
+  <!-- Arrows to kernel -->
+  <line x1="160" y1="290" x2="160" y2="318" class="arrow"/>
+  <line x1="720" y1="290" x2="720" y2="318" class="arrow"/>
+
+  <text x="55" y="305" class="s">Both containers are ordinary host processes; the kernel enforces different views + limits.</text>
+</svg>

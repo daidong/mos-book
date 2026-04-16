@@ -1,0 +1,107 @@
+{
+  "id": "medium_multi_cause",
+  "title": "API gateway p99 spike (memory pressure + noisy neighbor CPU bursts)",
+  "now": "2026-02-17T03:18:41Z",
+  "host": {
+    "hostname": "ip-10-0-7-22",
+    "os": "Ubuntu 22.04.3 LTS",
+    "kernel": "5.15.0-91-generic",
+    "uptime": "9 days",
+    "cpu": "4 vCPU",
+    "mem": "8 GiB"
+  },
+  "narrative": "p99 alert on api-gateway. Some requests stall ~700ms. Traffic slightly up. A batch job started on the same node.",
+  "alerts": [
+    {
+      "severity": "sev2",
+      "service": "api-gateway",
+      "name": "p99 latency",
+      "summary": "p99 > 700ms for 10 minutes (SLO: 120ms)",
+      "started": "03:07Z",
+      "affected": "~2%"
+    },
+    {
+      "severity": "sev3",
+      "service": "node",
+      "name": "cpu steal",
+      "summary": "CPU steal time elevated on one core", 
+      "started": "03:08Z",
+      "affected": "intermittent"
+    }
+  ],
+  "groundTruth": {
+    "primary": "mixed",
+    "mechanism": "two slow paths: (1) major faults during cache misses under memory pressure (2) scheduling delays during batch CPU bursts",
+    "notes": [
+      "A batch job is CPU-intensive and causes runqueue contention bursts.",
+      "Memory is near limit; swapping occurs occasionally.",
+      "Tail requests correlate with either (a) pgmajfault spikes or (b) high run queue + context switches."
+    ]
+  },
+  "terminal": {
+    "persona": {
+      "prompt": "student@gateway-host:~$"
+    },
+    "help": "Try: top -bn1 | vmstat 1 5 | free -m | cat /proc/vmstat | grep -E pgmajfault /proc/vmstat\nFocus: distinguish queueing (CPU) vs paging (memory).",
+    "policy": {
+      "maxLen": 120,
+      "allow": [
+        "help",
+        "top",
+        "free",
+        "vmstat",
+        "cat",
+        "grep",
+        "ps",
+        "ss",
+        "dmesg"
+      ],
+      "rules": {
+        "cat": {
+          "regex": "^cat (/proc/(meminfo|vmstat|loadavg))$",
+          "error": "only /proc/meminfo, /proc/vmstat, /proc/loadavg are available"
+        },
+        "grep": {
+          "regex": "^grep -E [A-Za-z0-9|]+ (/proc/vmstat|/proc/loadavg)$",
+          "error": "grep is only allowed on /proc/vmstat or /proc/loadavg"
+        },
+        "vmstat": {
+          "regex": "^vmstat( [0-9]+ [0-9]+)?$",
+          "error": "vmstat usage: vmstat 1 5"
+        },
+        "top": {
+          "regex": "^top -bn1$",
+          "error": "top usage: top -bn1"
+        },
+        "free": {
+          "regex": "^free -m$",
+          "error": "free usage: free -m"
+        }
+      }
+    }
+  },
+  "llm": {
+    "mode": "mock",
+    "model": "gpt-4o-mini",
+    "temperature": 0.2
+  },
+  "commandLibrary": {
+    "help": "Allowed: top -bn1 | free -m | vmstat 1 5 | cat /proc/vmstat | cat /proc/loadavg | grep -E <pat> <file>\nNo pipes, redirects, or quotes.\n",
+
+    "top -bn1": "top - 03:18:41 up  9 days,  5:47,  2 users,  load average: 3.10, 2.44, 1.20\nTasks: 212 total,   2 running, 210 sleeping,   0 stopped,   0 zombie\n%Cpu(s): 55.0 us, 10.5 sy,  0.0 ni, 30.0 id,  2.5 wa,  0.0 hi,  2.0 si,  0.0 st\nMiB Mem :   8192.0 total,    210.0 free,   7480.0 used,    502.0 buff/cache\nMiB Swap:   2048.0 total,   1200.0 free,    848.0 used\n\n  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND\n 3201 root      20   0 1800.0m  950.0m  12.0m R  165.0  11.6  10:12.22 batch-etl\n 1877 app       20   0 2200.0m  780.0m  20.0m S   85.0   9.5  22:44.08 api-gateway\n",
+
+    "free -m": "               total        used        free      shared  buff/cache   available\nMem:            8192        7480         210          95         502         420\nSwap:           2048         848        1200\n",
+
+    "vmstat 1 5": "procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----\n r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st\n 3  1 868352 215040  32768 481280  18   22   420   310  920 1850 54 10 30  4  0\n 5  0 868608 210944  32768 480896   0   64   120   480  980 2400 70 11 18  1  0\n 2  2 868736 208896  32768 480512  32    0   520   110  910 1600 40  9 46  5  0\n 6  0 868864 206848  32768 480128   0   48   140   450 1005 2550 72 10 17  1  0\n 3  1 868928 205824  32768 479872  24   16   410   240  940 1900 55 10 31  4  0\n",
+
+    "cat /proc/loadavg": "3.10 2.44 1.20 2/212 4123\n",
+
+    "cat /proc/vmstat": "pgfault 99812344\npgmajfault 22012\npswpin 2210\npswpout 5441\n",
+
+    "grep -E pgmajfault /proc/vmstat": "pgmajfault 22012\n",
+
+    "grep -E 'pgmajfault|pswp' /proc/vmstat": "pgmajfault 22012\npswpin 2210\npswpout 5441\n",
+
+    "dmesg": "[  +0.000000] cpu: batch-etl pinned to cpu2 at 03:07\n[  +0.000000] api-gateway: p99 alert fired\n"
+  }
+}
