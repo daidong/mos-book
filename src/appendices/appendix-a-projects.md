@@ -4,98 +4,186 @@ This appendix summarizes four multi-week capstone projects. They
 integrate material from multiple chapters and are the intended
 vehicle for the second half of a semester built around this book.
 
-Each project is deliverable as a short paper plus a reproducibility
-artifact (see Chapter 13). Full project briefs and grading rubrics
-live in the `projects/` directory of the book repository.
+Each project is deliverable as a short paper plus a
+reproducibility artifact (see Chapter 13). Full project briefs
+and grading rubrics live in the `projects/` directory of the
+book repository.
 
-<!-- SOURCE: OS-CISC663/projects/README.md and each project's
-     project_instruction.md + RUBRIC.md. Only use the v2
-     integrative formulation (PROJECTS_v2_integrative.md), not
-     the older PROJECTS_v1_lablike.md version. -->
+All four projects share a common shape:
+
+1. **Frame a concrete system case study.** A specific service
+   exhibiting a specific behavior — an LLM inference server
+   with unstable p99, a microservice chain with fan-out tail
+   inflation, a container runtime with cold-start latency.
+2. **Build an evidence-driven investigation.** Apply the
+   Chapter 3 contract: two independent signals plus one
+   exclusion for every claim.
+3. **Propose and validate an intervention.** Change one thing,
+   measure before/after, explain the mechanism.
+4. **Ship a reproducibility artifact.** Scripts, raw data,
+   figure-regeneration code, environment pinning (Chapter 13).
+
+Pick the project that matches your background. All four touch
+on Chapters 2–3 (measurement, tail latency); the other chapters
+each project emphasizes are listed below.
 
 ---
 
 ## A.1 Project 1: Red/Blue Oncall Game
 
-<!-- SOURCE: projects/01-incident-observability-redblue/
-     Two-team adversarial project.
-     Red team: inject faults (CPU contention, fsync stalls, OOM,
-       packet loss) into a small service stack.
-     Blue team: detect, diagnose, and remediate using the
-       observability stack from Chapters 3, 5, 7, 10.
-     Rotates roles midway through the project.
-     Deliverable: a postmortem per incident + a unified report. -->
+Two-team adversarial project. Teams alternate roles.
 
-**Chapters exercised:** 3 (tail latency), 5 (scheduler), 6-7
-(containers, K8s QoS), 10 (fsync).
+- **Red team** injects faults into a small service stack
+  (sample: a Redis + nginx + stress-ng setup inside a `kind`
+  cluster). Fault categories: CPU contention, `fsync` stalls,
+  memory pressure causing OOM kills, packet loss, throttling
+  via `cpu.max`, bursty background I/O.
+- **Blue team** is on call. They use the observability stack
+  from Chapters 3 (USE method), 5 (eBPF), 7 (cgroup stats),
+  and 10 (`iostat`, `filefrag`). For each incident they
+  produce a postmortem: symptom timeline, hypothesis chain,
+  evidence, mechanism, mitigation.
 
-**Skills built:** incident response, observability toolchains,
-systematic debugging under time pressure.
+Teams rotate midway through the project. Final deliverable:
+a unified report with one postmortem per incident and a
+reflective section on what each team learned from being on the
+other side of the alert.
+
+**Chapters exercised:** 3 (tail latency, USE), 5 (scheduler
+internals), 6–7 (containers, K8s QoS), 10 (fsync, page cache).
+
+**Skills built:** incident response under time pressure,
+observability toolchains, systematic debugging, producing
+postmortems that are readable by engineers who were not in the
+room.
+
+**Difficulty:** Medium. Good fit for 2–3 student teams.
 
 ---
 
 ## A.2 Project 2: Multi-hop K8s Tail Latency
 
-<!-- SOURCE: projects/02-multihop-k8s-tail-latency/
-     Deploy a 3-4 hop service chain in K8s.
-     Measure end-to-end p99 under varying request rates.
-     Decompose tail latency by hop using distributed tracing and
-     kernel-level eBPF probes.
-     Propose and validate at least one intervention
-       (e.g., pod affinity, priority class, sysctl tune). -->
+Deploy a 3–4 hop service chain on a local `kind` cluster —
+frontend → API → cache → database. Generate traffic with a
+load generator (`wrk2` or Locust at constant arrival rate,
+Chapter 3 §3.2) and record end-to-end p99 at multiple request
+rates.
 
-**Chapters exercised:** 3 (tail latency), 5 (scheduler), 7 (QoS),
-9 (scheduling constraints).
+Decompose the tail by hop using distributed tracing (OpenTelemetry
+exporters are cheap to wire in) plus kernel-level eBPF probes at
+critical points (scheduler wakeups, disk I/O, TCP establishment).
+Identify which hop owns the tail at each load level, and why.
 
-**Skills built:** end-to-end performance analysis in a realistic
-microservice stack, evidence-driven tuning.
+Propose and validate at least one intervention: pod affinity so
+the cache and its consumer co-locate, a PriorityClass that
+protects the latency-sensitive tier, a `net.core.somaxconn`
+bump, or a QoS class change from Burstable to Guaranteed.
+Measure before and after with the same evidence contract.
+
+**Chapters exercised:** 3 (tail latency, USE method), 5 (eBPF
+tracepoints), 7 (QoS and CFS bandwidth control), 9 (scheduling
+constraints and affinity).
+
+**Skills built:** end-to-end performance analysis in a
+realistic microservice stack, distributed tracing, evidence-
+driven tuning, writing a performance paper that is honest about
+where the latency actually comes from.
+
+**Difficulty:** Medium–high. Individual or pair project.
 
 ---
 
 ## A.3 Project 3: LLM Inference Server Profiling
 
-<!-- SOURCE: projects/03-llm-inference-profiling/
-     Stand up a local LLM inference server (vLLM, llama.cpp, or
-     similar).
-     Characterize: time-to-first-token, steady-state throughput,
-     GPU/CPU utilization, memory pressure, batching behavior.
-     Study the effect of batch size, context length, and
-     concurrency on p99 first-token latency. -->
+Stand up a local LLM inference server — vLLM, llama.cpp, TGI,
+or similar — on whatever accelerator you have (including CPU).
+Characterize its performance:
 
-**Chapters exercised:** 2 (measurement), 3 (tail latency),
-4 (threads/concurrency), 10-11 (storage if models stream from disk).
+- **Time-to-first-token (TTFT)** under varying prompt lengths.
+- **Inter-token latency (ITL)** during decoding.
+- **Steady-state throughput** in tokens per second at varying
+  concurrencies.
+- **Resource utilization:** GPU utilization if you have one,
+  otherwise CPU %, memory usage, page faults.
+- **Batching behavior.** Does the server batch requests? What
+  does the batch-size distribution look like? How does it
+  respond to bursty arrivals?
 
-**Skills built:** GPU/CPU profiling, interpreting queuing delays,
-reasoning about accelerator scheduling.
+Your experiments should quantify how batch size, context
+length, and concurrency interact to produce the shape of p99
+TTFT. At least one intervention: tune a batching parameter,
+pin the worker, change the KV-cache page size, or run with a
+different precision (fp16 vs int8). Explain the mechanism
+behind the change you observe.
+
+**Chapters exercised:** 2 (measurement methodology), 3 (tail
+latency, percentiles), 4 (concurrency and queuing), 10–11
+(storage if model weights stream from disk).
+
+**Skills built:** GPU/CPU profiling, reasoning about queuing
+delays in a stateful server, distinguishing
+compute-bound from memory-bound from I/O-bound regimes, writing
+performance claims about an AI system that survive scrutiny.
+
+**Difficulty:** Medium–high. Prior exposure to GPU tooling
+helps but is not required.
 
 ---
 
 ## A.4 Project 4: SWE-agent Runtime Profiling
 
-<!-- SOURCE: projects/04-swe-agent-profiling/
-     Instrument an open-source SWE-agent (e.g., SWE-agent, OpenHands)
-     running against a small benchmark.
-     Produce a per-tool-call latency breakdown (think time, tool
-     execution time, I/O wait).
-     Identify the bottleneck: model inference? sandbox setup?
-     file I/O? Propose a concrete optimization and evaluate it. -->
+Instrument an open-source software-engineering agent — SWE-agent,
+OpenHands, or similar — running against a small benchmark (a
+subset of SWE-bench-lite is the canonical choice). Produce a
+per-tool-call latency breakdown:
 
-**Chapters exercised:** 2-3 (measurement, tail latency),
-6 (containers for sandboxing), 12 (agent runtimes).
+- Model think time (the time spent waiting for the LLM response).
+- Tool execution time (the child process, the HTTP request,
+  etc.).
+- Sandbox setup cost (container creation, namespace setup — see
+  Chapter 12).
+- I/O wait time inside the tool.
 
-**Skills built:** instrumenting complex systems you did not write,
-reasoning about agent latency budgets, connecting measurement to
-improvement.
+Build the breakdown from structured audit logs (Chapter 12 §12.5)
+plus OS-level instrumentation (eBPF or `strace`). Identify the
+dominant cost per task: model inference? sandbox setup? file
+I/O? Is it consistent across tasks or task-dependent?
+
+Propose one concrete optimization — a pre-forked sandbox pool,
+a smaller tool allowlist, caching reads of unchanged files, a
+faster model served locally — implement it, and evaluate. Your
+evaluation must honestly report cases where the optimization
+does not help, or makes a different bucket of latency worse.
+
+**Chapters exercised:** 2–3 (measurement, tail latency), 4
+(fork and process lifecycle), 6 (container sandboxing), 12
+(agent runtime safety and performance).
+
+**Skills built:** instrumenting complex systems you did not
+write, reasoning about end-to-end latency budgets in an agent,
+connecting measurement to improvement without overclaiming.
+
+**Difficulty:** High. Individual project for graduate students
+with prior systems experience.
 
 ---
 
 ## Deliverables Common to All Projects
 
-- A short paper (6-10 pages) in the template provided in
-  `templates/final-report-template.md`.
-- A reproducibility artifact that satisfies the standards of
-  Chapter 13 (scripts, versions, raw data, figure regeneration).
-- A 15-minute final presentation.
-- A peer-reproduction report in which a different team attempts
-  to reproduce the headline result (see
-  `templates/reproduction-report-template.md`).
+Every project submits:
+
+1. **A short paper** (6–10 pages) in the template at
+   `templates/final-report-template.md`. Must include:
+   problem, hypothesis, methodology, results, mechanism,
+   limitations, future work.
+2. **A reproducibility artifact** meeting the standards of
+   Chapter 13: environment script, pinned versions, raw data,
+   analysis scripts, per-figure reproduction instructions.
+3. **A 12–15 minute final presentation.**
+4. **A peer-reproduction report** — another team attempts to
+   reproduce your headline result and submits a report using
+   `templates/reproduction-report-template.md`.
+
+The peer reproduction step is where artifacts get graded most
+honestly. "Works on my machine" quickly becomes "works on
+someone else's machine or it doesn't."

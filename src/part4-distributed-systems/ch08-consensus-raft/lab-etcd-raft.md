@@ -1,66 +1,406 @@
 # Lab: Observing Raft in etcd
 
-> **Estimated time:** 4-5 hours
+> **Estimated time:** 4–5 hours
 >
-> **Prerequisites:** Chapter 8 concepts (Raft, etcd architecture)
+> **Prerequisites:** Chapter 8 concepts (Raft, etcd); Docker in an
+> Ubuntu VM
 >
-> **Tools used:** etcd, etcdctl, curl, bash
+> **Tools used:** `docker`, `etcdctl`, etcd `benchmark`, `curl`,
+> `bash`
 
 ## Objectives
 
 - Build and operate a 3-node etcd cluster
-- Observe leader election, term progression, and log indices
+- Inspect Raft term, leader, and log index
 - Measure the latency cost of consensus (single-node vs 3-node)
 - Simulate failures (leader crash, network partition) and observe
   recovery
+- Watch follower catch-up after log divergence
 
 ## Background
 
-<!-- SOURCE: week7/lab7_raft_instructions.md
-     Students run a local 3-node etcd cluster and use etcdctl
-     to inspect cluster state, trigger elections, and measure
-     write/read latency. -->
+This lab runs etcd v3.5.17 in Docker containers inside your Ubuntu
+VM. All observations come from `etcdctl` and etcd's own
+`benchmark` tool; you do not need the host-native etcd client.
+Starter scripts and manifests live in `code/ch08-etcd-raft/`.
+
+## Prerequisites
+
+### Docker inside the VM
+
+Install Docker Engine if you have not already (from Lab 6 / 7):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y curl uidmap
+curl -fsSL https://get.docker.com | sudo sh
+dockerd-rootless-setuptool.sh install
+export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock
+systemctl --user start docker
+
+docker version
+docker run --rm hello-world
+```
+
+### Choose the etcd image
+
+```bash
+export ETCD_IMAGE=quay.io/coreos/etcd:v3.5.17
+# Fallback: gcr.io/etcd-development/etcd:v3.5.17
+docker pull ${ETCD_IMAGE}
+docker run --rm ${ETCD_IMAGE} etcd --version
+docker run --rm ${ETCD_IMAGE} etcdctl version
+```
+
+Both commands should report `3.5.17`.
+
+### Helper shell functions
+
+Define once per shell session:
+
+```bash
+etcdctl_in() {
+  docker exec -e ETCDCTL_API=3 "$1" etcdctl "${@:2}"
+}
+
+export CLUSTER_EP=http://etcd1:2379,http://etcd2:2379,http://etcd3:2379
+export SINGLE_EP=http://127.0.0.1:2390
+export HOST_CLUSTER_EP=http://127.0.0.1:2379,http://127.0.0.1:2381,http://127.0.0.1:2382
+```
+
+`etcdctl_in` avoids a known issue: some etcd images lack
+`/bin/sh`, so `docker exec <c> sh -lc '...'` fails. Calling
+`etcdctl` directly sidesteps it.
+
+### Install the benchmark tool (for Part C Phase 2)
+
+```bash
+sudo apt install -y git golang-go
+mkdir -p ~/src && cd ~/src
+git clone --depth 1 --branch v3.5.17 https://github.com/etcd-io/etcd.git
+cd etcd
+go install -v ./tools/benchmark
+export PATH=$PATH:$(go env GOPATH)/bin
+benchmark --help | head -5
+```
 
 ## Part A: Cluster Setup and State Inspection (Required)
 
-<!-- Start 3-node cluster. Use etcdctl endpoint status to inspect
-     term, leader, raft index. Put/get a key and observe index
-     progression. -->
+### A.1 Create the network and launch three nodes
+
+```bash
+docker network create etcd-net
+
+for i in 1 2 3; do
+  port_client=$((2379 + (i-1)*2))
+  docker run -d --name etcd$i --network etcd-net \
+    -p ${port_client}:2379 \
+    ${ETCD_IMAGE} etcd \
+    --name node$i \
+    --initial-advertise-peer-urls http://etcd$i:2380 \
+    --listen-peer-urls http://0.0.0.0:2380 \
+    --advertise-client-urls http://etcd$i:2379 \
+    --listen-client-urls http://0.0.0.0:2379 \
+    --initial-cluster node1=http://etcd1:2380,node2=http://etcd2:2380,node3=http://etcd3:2380 \
+    --initial-cluster-state new \
+    --initial-cluster-token lab7-cluster
+done
+
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+```
+
+### A.2 Inspect Raft state
+
+```bash
+etcdctl_in etcd1 --endpoints=${CLUSTER_EP} endpoint status -w table
+```
+
+The table shows each endpoint's ID, version, DB size, whether it
+is leader, Raft term, and Raft applied index.
+
+Record:
+
+| Node | Is leader | Raft term | Raft index |
+|---|---|---|---|
+| etcd1 |   |   |   |
+| etcd2 |   |   |   |
+| etcd3 |   |   |   |
+
+### A.3 Watch the index advance
+
+```bash
+etcdctl_in etcd1 --endpoints=${CLUSTER_EP} put /lab/key1 "hello"
+etcdctl_in etcd1 --endpoints=${CLUSTER_EP} endpoint status -w table
+# Raft index should have advanced by at least 1.
+```
+
+### Part A Checklist
+
+- [ ] 3-node cluster up, all nodes `Healthy`
+- [ ] Leader, term, index recorded
+- [ ] Index advance observed after a write
 
 ## Part B: Leader Failure and Re-election (Required)
 
-<!-- Kill the leader node. Observe: new election, term increment,
-     new leader selected. Measure time to re-election.
-     Note: randomized timeout prevents split votes. -->
+### B.1 Identify and kill the leader
+
+```bash
+LEADER=$(etcdctl_in etcd1 --endpoints=${CLUSTER_EP} endpoint status -w table \
+  | awk '/true/ {print $3}' | tr -d ,)
+echo "Current leader container: $LEADER"
+
+# Capture "before" snapshot
+etcdctl_in etcd1 --endpoints=${CLUSTER_EP} endpoint status -w table > status_before.txt
+
+# Time the election
+START=$(date +%s%N)
+docker stop ${LEADER%:*}    # strip port if needed
+sleep 3
+# Query a surviving node
+SURVIVOR=$(docker ps --format '{{.Names}}' | grep etcd | head -1)
+etcdctl_in $SURVIVOR --endpoints=${CLUSTER_EP} endpoint status -w table > status_after.txt
+END=$(date +%s%N)
+
+echo "Election window: $(( (END-START)/1000000 )) ms"
+cat status_after.txt
+```
+
+Record:
+
+- Old leader container name.
+- Old term; new term.
+- Election time in milliseconds.
+- Which node became the new leader.
+
+### B.2 Restart the old leader
+
+```bash
+docker start ${LEADER%:*}
+sleep 3
+etcdctl_in etcd1 --endpoints=${CLUSTER_EP} endpoint status -w table
+```
+
+The rejoining node should become a follower, not resume
+leadership. Confirm with the status table.
+
+### Part B Checklist
+
+- [ ] Old leader stopped; new leader elected in seconds
+- [ ] Term incremented
+- [ ] Restarted node rejoined as follower
+- [ ] Election timeline recorded in report
 
 ## Part C: Consensus Latency (Required)
 
-<!-- Benchmark write latency: 1-node vs 3-node.
-     Benchmark read latency: linearizable vs serializable.
-     Explain the difference in terms of quorum round-trips. -->
+**Goal:** Measure the cost of 3-node consensus vs 1-node.
+
+### Phase 1 — 1-node etcd
+
+```bash
+docker run -d --name etcd-single --network etcd-net -p 2390:2379 \
+  ${ETCD_IMAGE} etcd \
+  --name single \
+  --advertise-client-urls http://etcd-single:2379 \
+  --listen-client-urls http://0.0.0.0:2379
+```
+
+Measure:
+
+```bash
+benchmark --endpoints=${SINGLE_EP} --conns=1 --clients=1 \
+  put --total=10000 --key-size=16 --val-size=256
+```
+
+Record p50, p95, p99 write latency and throughput.
+
+### Phase 2 — 3-node cluster
+
+Make sure all three cluster nodes are running, then:
+
+```bash
+benchmark --endpoints=${HOST_CLUSTER_EP} --conns=1 --clients=1 \
+  put --total=10000 --key-size=16 --val-size=256
+```
+
+Record the same percentiles. Compare:
+
+| Metric | 1-node | 3-node | Ratio |
+|---|---|---|---|
+| p50 write (ms) |   |   |   |
+| p99 write (ms) |   |   |   |
+| Throughput (ops/s) |   |   |   |
+
+### Phase 3 — Linearizable vs serializable reads
+
+```bash
+benchmark --endpoints=${HOST_CLUSTER_EP} --conns=1 --clients=1 \
+  range /lab/key1 --consistency=l --total=1000
+benchmark --endpoints=${HOST_CLUSTER_EP} --conns=1 --clients=1 \
+  range /lab/key1 --consistency=s --total=1000
+```
+
+Record p50 / p99 for each.
+
+### Part C Explanation
+
+In the report, write one paragraph on:
+
+- Where the extra latency in 3-node comes from (hint: Chapter 8
+  §8.5 — `fsync` and network round-trip).
+- Why linearizable reads cost more than serializable reads (hint:
+  the ReadIndex heartbeat).
+
+### Part C Checklist
+
+- [ ] 1-node and 3-node benchmark numbers collected
+- [ ] Linearizable vs serializable reads compared
+- [ ] Mechanism paragraph written
 
 ## Part D: Writes During Leader Failure (Required)
 
-<!-- Run sustained writes. Kill leader mid-stream.
-     Observe: writes fail during election, resume after.
-     Count lost writes. -->
+**Goal:** Observe writes fail during an election and resume after.
+
+### D.1 Sustained writes
+
+In one terminal, run a tight loop:
+
+```bash
+i=0
+while true; do
+  i=$((i+1))
+  START=$(date +%s%N)
+  if etcdctl_in etcd1 --endpoints=${CLUSTER_EP} put /burst/$i x > /dev/null 2>&1; then
+    END=$(date +%s%N)
+    echo "$i ok $(( (END-START)/1000000 ))"
+  else
+    echo "$i FAIL"
+  fi
+done | tee write_log.txt
+```
+
+### D.2 Kill the leader mid-stream
+
+In a second terminal, kill the leader container. Watch
+`write_log.txt`:
+
+- A window of `FAIL` or very high-latency entries (hundreds of ms
+  to a few seconds).
+- Writes resume once a new leader is elected.
+
+### D.3 Count the outage
+
+```bash
+awk '/FAIL/ {c++} END {print "failed writes:", c}' write_log.txt
+awk '/ok/ {print $3}' write_log.txt | sort -n | tail -5
+```
+
+Record: total failed writes, maximum successful-write latency
+during the outage.
+
+### Part D Checklist
+
+- [ ] Sustained writes script running
+- [ ] Outage window visible in the log
+- [ ] Failed-write count and max latency recorded
 
 ## Part E: Network Partition (Optional)
 
-<!-- Simulate partition: isolate one node.
-     Show that the 2-node majority continues serving.
-     Show that the isolated node cannot commit writes.
-     Heal partition, observe catch-up. -->
+**Goal:** Show a minority cannot commit writes while a majority
+can.
+
+```bash
+# Isolate etcd3 from the other two
+docker network disconnect etcd-net etcd3
+
+# From the majority side (etcd1/etcd2), writes should still work:
+etcdctl_in etcd1 --endpoints=${CLUSTER_EP} put /partition/maj "ok"
+
+# From the minority side, writes should hang or time out:
+etcdctl_in etcd3 --endpoints=http://etcd3:2379 \
+  --command-timeout=5s put /partition/min "x" || echo "expected failure"
+
+# Reconnect and watch catch-up
+docker network connect etcd-net etcd3
+sleep 3
+etcdctl_in etcd3 --endpoints=http://etcd3:2379 get /partition/maj
+```
+
+Confirm that `etcd3` sees the key written during its isolation,
+demonstrating post-partition catch-up.
 
 ## Part F: Follower Lag and Catch-up (Optional)
 
-<!-- Stop a follower. Write many keys. Restart follower.
-     Observe snapshot transfer or incremental catch-up. -->
+**Goal:** See a follower fall behind and catch up, possibly via a
+snapshot.
+
+```bash
+docker stop etcd3
+
+# Generate many writes on the majority
+for i in $(seq 1 5000); do
+  etcdctl_in etcd1 --endpoints=${CLUSTER_EP} put /lag/$i x > /dev/null
+done
+
+# Restart etcd3 and watch it catch up
+docker start etcd3
+sleep 5
+etcdctl_in etcd1 --endpoints=${CLUSTER_EP} endpoint status -w table
+```
+
+Record the Raft index on each node before and after. In large
+gaps (thousands of entries) etcd will send a snapshot instead of
+replaying the WAL; log output on `etcd3` will mention it.
 
 ## Deliverables
 
-- Cluster state table (term, leader, raft index) before and after
-  each experiment
-- Latency comparison: single-node vs 3-node writes
-- Re-election timeline with measurements
-- Written explanation of each observation in terms of Raft protocol
+Submit:
+
+1. **`report.md`** — narrative covering Parts A–D (and Parts E/F
+   if attempted). For each part include the recorded numbers plus
+   one paragraph on what Chapter 8 section explains the
+   observation.
+2. **Raw output** — `status_before.txt`, `status_after.txt`,
+   `write_log.txt`, benchmark output.
+3. **Environment block** — VM config, Docker version, etcd
+   version, disk type (SSD / spinning / virtualized).
+
+## Grading Rubric
+
+| Criterion | Points |
+|---|---|
+| Part A cluster + inspection | 15 |
+| Part B leader failure + re-election | 20 |
+| Part C latency comparison (1-node vs 3-node, linearizable vs serializable) | 30 |
+| Part D sustained writes across a leader crash | 20 |
+| Mechanism explanations tied to Chapter 8 | 15 |
+| **Optional** Part E or F | +10 bonus |
+
+**Total: 100 (+10 bonus).**
+
+## Cleanup
+
+```bash
+docker stop etcd1 etcd2 etcd3 etcd-single 2>/dev/null || true
+docker rm   etcd1 etcd2 etcd3 etcd-single 2>/dev/null || true
+docker network rm etcd-net 2>/dev/null || true
+```
+
+## Common Pitfalls
+
+- **Image does not contain `/bin/sh`.** Use the `etcdctl_in`
+  helper; do not wrap `etcdctl` in `sh -lc`.
+- **Benchmark tool not on `PATH`.** Use `~/go/bin/benchmark` or
+  add `$(go env GOPATH)/bin` to `PATH`.
+- **`fsync` is the same speed as main memory.** Means the VM is
+  not actually `fsync`'ing to durable storage — numbers are not
+  representative of real hardware. Note this in the report.
+- **Writes to the old leader after it is restarted.** Harmless;
+  the restarted node is a follower, and requests are proxied to
+  the new leader. But latency may look slightly higher.
+
+## Reference
+
+- etcd docs: <https://etcd.io/docs/v3.5/>
+- `etcdctl` reference:
+  <https://etcd.io/docs/v3.5/dev-guide/interacting_v3/>
+- Raft visualization: <https://raft.github.io/>

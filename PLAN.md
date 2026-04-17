@@ -1,10 +1,11 @@
 # MOS-BOOK Build Plan
 
 **Last updated:** 2026-04-16
-**Status:** Stub-complete — all stubs, code, projects, templates, figures,
-`book.toml`, and `.gitignore` are in place. `mdbook build` succeeds
-end-to-end with mdbook v0.5.2. Next phase: fill chapter prose from
-course materials.
+**Status:** Prose-complete — all 13 chapters (index + lab) and
+Appendices A–C are drafted from course materials, ~10 200 lines
+across 28 files. `mdbook build` succeeds end-to-end with mdbook
+v0.5.2. Next phase: expand lab worked examples, wire up CI, add
+PDF/EPUB outputs.
 
 ---
 
@@ -214,10 +215,17 @@ mos-book/
 - [x] `mdbook build` succeeds end-to-end (mdbook v0.5.2); output
       lands in `book/`.
 
+### Prose Fill Pass (2026-04-16)
+
+- [x] Fill chapter prose: replace SOURCE comments with text drawn
+      from the referenced course materials.
+      All 13 chapters (index + lab) and Appendices A–C now have
+      complete prose, written to the quality bar set by Chapter 1.
+      `mdbook build` succeeds end-to-end. Total: ~10 200 lines
+      across 28 prose files.
+
 ### Next Phase
 
-- [ ] Fill chapter prose: replace SOURCE comments with text drawn
-      from the referenced course materials.
 - [ ] Expand lab deliverable sections with worked examples.
 - [ ] Wire up CI to run `mdbook build` + `mdbook test` on PR.
 - [ ] Decide on PDF / EPUB backends and test those paths.
