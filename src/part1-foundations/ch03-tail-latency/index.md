@@ -4,351 +4,295 @@
 >
 > After completing this chapter and its lab, you will be able to:
 >
-> - Explain why tail latency (p99) matters more than average latency
->   in production systems
-> - Compute and interpret percentile distributions from raw latency
->   data
-> - Apply the USE method (Utilization, Saturation, Errors) to
->   systematically diagnose performance problems
-> - Build an evidence chain with multiple independent signals to
->   support a diagnosis
+> - Explain why p99 latency matters more than average latency for most
+>   production services
+> - Read percentile summaries and reason about what they hide
+> - Apply the USE method (Utilization, Saturation, Errors) as a disciplined
+>   incident workflow
+> - Build an evidence chain with supporting signals and an explicit exclusion
+>   check
 
-Chapter 2 gave you the tools to measure a single process. This
-chapter asks a different question: when the thing being measured is a
-*service*, and the symptom is "p99 latency spiked", where do you
-look? The answer has two layers. The first layer is statistical — why
-the mean is a misleading number for a distribution with a long tail.
-The second layer is mechanical — why p99 is almost always an OS
-"slow path" (fault, queue, I/O wait, lock contention) that fires on a
-small fraction of requests. Together they give you a debugging
-discipline: the USE method, which turns "something is slow" into a
-finite checklist.
+Chapter 2 focused on a single program. This chapter shifts to services and
+incidents. The question is no longer merely "why is this binary slower?" It
+is "why are a small fraction of requests suddenly much slower, and how do I
+prove the cause?"
 
-## 3.1 Why the Mean Lies
+## 3.1 Why p99 Matters More Than the Mean
 
-A service reports "typical latency around 5 ms". Is it fast? It
-depends on what you mean by typical:
+Suppose a service reports these numbers:
 
-| Percentile | Latency |
-|---|---|
-| p50 (median) | 3 ms |
+| Metric | Value |
+|---|---:|
+| mean | 6 ms |
+| p50 | 3 ms |
 | p90 | 8 ms |
 | p99 | 150 ms |
 | p99.9 | 800 ms |
 
-The median looks fine. The tail does not. One request in a hundred
-waits 150 ms — 50× the median. A page that makes a hundred backend
-calls to render hits that tail on almost two-thirds of page loads:
+The mean sounds fine. The tail does not. One request in a hundred takes 150
+ms. If a page fan-outs to 100 backend calls, the chance that at least one of
+those calls lands in the p99 is:
 
 ```text
-P(at least one call hits the p99) = 1 - 0.99^100 ≈ 0.63
+1 - 0.99^100 ≈ 0.63
 ```
 
-In a fan-out system, the slowest component's tail becomes the user's
-typical experience. This is **tail amplification**, and it is the
-reason production systems live and die on p99, not on mean.
+![Diagram showing one page request faning out to one hundred backend calls, where a small fraction of slow calls still makes many page loads experience the tail](figures/tail-amplification.svg)
+*Figure 3.1: Tail amplification is a fan-out effect. A dependency can be slow only rarely and still dominate the user-facing experience once each page load depends on many such calls.*
 
-> **Key insight:** Averages hide the tail. A well-behaved service and
-> a deeply broken one can have the same mean latency. If you only
-> watch averages, you will not notice the broken one until customers
-> complain.
+So a page composed of many individually "good" services can still feel slow
+most of the time. This is why production teams care about p99 and p99.9.
+They capture user-visible risk that the mean hides.
 
-### What percentiles actually mean
+A quick histogram makes the same point more concretely:
 
-A percentile is a position in the sorted list of samples. Given
-sorted latencies, p50 is the halfway value, p99 is the value that 99 %
-of samples fall below:
+| Latency bucket | Requests out of 10,000 |
+|---|---:|
+| 0–5 ms | 8,700 |
+| 5–10 ms | 1,100 |
+| 10–50 ms | 120 |
+| 50–200 ms | 70 |
+| 200+ ms | 10 |
 
-```text
-sorted latencies: [1, 2, 2, 3, 5, 8, 10, 15, 50, 500] ms
-                   p10 p20 p30 p40 p50 p60 p70 p80 p90 p100
-```
+Most requests are fine. A small slow tail dominates the operational story.
+That is the normal shape of production latency bugs.
 
-Two consequences:
+![Latency distribution histogram with percentile markers showing p50 at 5ms, average at 15ms, p95 at 50ms, p99 at 200ms, and p99.9 at 500ms](figures/latency_distribution_percentiles.png)
+*Figure 3.2: A typical long-tail latency distribution. The median looks healthy. The mean is already misleading. The p99 and p99.9 reveal the true user-facing risk.*
 
-- **Sample size matters.** The p99 of 100 samples is just the worst
-  one — one noisy outlier and the whole metric moves. With 10 000
-  samples, p99 is the top 100, which you can analyze statistically.
-  The rule of thumb in this course: collect at least 10 000 requests
-  before quoting a p99 number.
-- **Histograms beat summaries.** A single p99 value summarizes the
-  tail, but plotting the full distribution (or a CDF) shows whether
-  the tail is a shelf, a ramp, or a bimodal mix. Tools like
-  HdrHistogram store the distribution compactly for exactly this
-  reason.
+> **Key insight:** Tail latency is not "average slowness." It is usually a
+> mostly healthy fast path plus a rare slow path with a large fixed cost.
 
-## 3.2 Percentile Statistics and Coordinated Omission
+## 3.2 Percentiles, Histograms, and Coordinated Omission
 
-There is a common benchmarking bug that makes p99 numbers look
-better than reality. The pattern is:
+A percentile is a position in the sorted sample set. That sounds simple, but
+it has consequences.
+
+First, sample count matters. The p99 of 100 requests is just the single worst
+request. The p99 of 10,000 requests is the worst 100 requests, which is much
+more stable. As a rule of thumb for this course, do not quote a p99 from only
+a few hundred samples unless you are explicit about the uncertainty.
+
+Second, a percentile summary is not the whole distribution. A histogram or
+CDF tells you whether the tail is narrow, heavy, bimodal, or drifting over
+time. Those shapes often distinguish different mechanisms.
+
+Third, many naive load generators under-report the tail because of
+**coordinated omission**. The bug looks like this:
 
 ```python
 while True:
-    start = time.now()
-    response = send_request()   # what if this takes 1 second?
-    latency = time.now() - start
-    record(latency)
+    start = now()
+    send_request()
+    record(now() - start)
 ```
 
-If one request stalls, the benchmark stops sending during the stall.
-The slow periods get under-sampled, which drags p99 down toward the
-fast-path values. Gil Tene called this **coordinated omission**, and
-his observation that "most published latency numbers are wrong" still
-holds.
+If one request stalls for a long time, the benchmark stops sending during the
+stall. The worst period is under-sampled, so the published p99 looks better
+than reality.
 
-Three practical fixes:
+Practical fixes:
 
-1. **Constant arrival rate.** Decide to send a request every *X*
-   milliseconds regardless of what the previous request did. A request
-   that is "late to send" becomes a latency sample, not a missing
-   measurement.
-2. **Purpose-built tools.** `wrk2`, Gatling, and anything backed by
-   HdrHistogram avoid coordinated omission by design.
-3. **Measure from the client.** Include queue time — the time a
-   request spent waiting to be sent — so you do not silently exclude
-   the worst cases.
+- send at a constant arrival rate;
+- use tools such as `wrk2` or HdrHistogram-backed clients;
+- record the waiting-to-send time, not just the server-side service time.
 
-The lab in this chapter is small enough that coordinated omission is
-not a problem (a single-threaded loop drives the workload and records
-every iteration), but in any real benchmarking project this is the
-first question to ask.
+In industry, this mistake is common in RPC benchmarks, microservice load
+reviews, and autoscaling evaluations. Tail numbers are only useful if the
+measurement method can see the tail.
 
-## 3.3 p99 Is Usually an OS "Slow Path"
+## 3.3 p99 Usually Comes from a Slow Path and a Queue
 
-Why does tail latency exist at all? A useful mental model:
+Most services have a fast path and several rare slow paths. The fast path is
+computation on warm data with no blocking. The slow path waits somewhere.
+That "somewhere" is usually a queue in or near the OS.
 
-- **Most requests** follow a **fast path** — data in cache, no
-  contention, no fault, no queue. Latency is bounded by computation.
-- **A few requests** trigger a **slow path** — a rare event with a
-  large fixed cost. Latency is bounded by whatever the slow path has
-  to wait for.
+| Slow path | What waits? | First observations |
+|---|---|---|
+| CPU runqueue delay | runnable thread waits for core time | `vmstat r`, load average, scheduler traces |
+| major page fault | thread waits for a page to be supplied | `major-faults`, `/proc/vmstat`, cgroup memory counters |
+| blocking storage I/O | thread waits for device completion | `iostat`, application logs, `%wa` |
+| lock contention | thread waits on another thread | `perf lock`, futex traces, app lock stats |
+| retry amplification | later requests wait on earlier delays | logs, timeout counters, dependency graph |
 
-Slow paths are almost always OS-mediated. Four of them dominate
-production outages:
+![Request lifecycle showing time spent executing and waiting in OS queues: CPU runqueue, disk I/O queue, socket buffers, and lock wait queues](figures/os_queues_tail_latency.png)
+*Figure 3.3: A request's total latency is execution time plus queue wait time. Most of the slow path is usually waiting, not processing. Each OS queue — CPU runqueue, disk I/O queue, socket buffer, lock wait queue — is a potential source of tail latency.*
 
-- **CPU runqueue delay.** The thread is ready to run but the CPU is
-  busy with something else. Measured by `sched_wakeup` →
-  `sched_switch` latency; eBPF surfaces this directly (Chapter 5).
-- **Blocking I/O.** A disk read, a network read, a fsync. The thread
-  goes off-CPU and joins a queue. Measured by `iostat` (queue depth,
-  `await`) and `/usr/bin/time -v` (voluntary context switches).
-- **Page faults.** A minor fault is cheap; a major fault requires
-  disk I/O and can cost milliseconds. Measured by `pgmajfault` in
-  `/proc/vmstat` and `perf stat -e major-faults`.
-- **Lock contention.** Mutex, futex, or spinlock wait. The thread is
-  off-CPU waiting for another thread to release the resource.
-  Measured by `perf lock`, bpftrace, or application-level lock
-  counters.
+The production contexts change, but the queueing logic does not. A Kubernetes
+pod with CPU quota still waits on a runqueue. A database replica still waits
+on storage I/O. An inference server still suffers when the working set spills
+and faults. An API gateway still amplifies the tail when retries overlap.
 
-The common thread: **tail latency is mostly time spent *waiting*, not
-time spent *executing*.** Every one of these waits is a queue
-somewhere in the OS — run queue, I/O queue, socket buffer, mutex
-wait queue. If you find the queue, you find the slow path.
+That is why the right debugging question is often: **what rare event can add
+this much waiting time to only a small fraction of requests?**
 
-> **Note:** When the symptom is "only ~1 % of requests are slow", the
-> 1 % is a big clue. It says some event that fires rarely is
-> responsible. Start by listing the rare events your workload can
-> trigger: major faults, GC pauses, compaction, failovers. Rule them
-> out one at a time.
+## 3.4 The USE Method as an Incident Workflow
 
-## 3.4 The USE Method
+Brendan Gregg's **USE method** is a coverage algorithm. For every resource,
+check three things.
 
-Brendan Gregg's **USE method** is not a tool. It is a coverage
-algorithm: for every resource, check three things.
+- **Utilization:** how busy is it?
+- **Saturation:** is there a queue or backlog?
+- **Errors:** are operations failing?
 
-- **Utilization.** How busy is the resource? (% time busy, occupied
-  capacity.)
-- **Saturation.** Is there a queue? Is work backing up?
-- **Errors.** Are operations failing?
-
-The checklist is finite. For a typical Linux system:
+For a Linux service, the first-pass checklist often looks like this:
 
 | Resource | Utilization | Saturation | Errors |
 |---|---|---|---|
-| CPU | `top`, `mpstat` | `vmstat r`, `loadavg` | high involuntary context switches |
-| Memory | `free -m`, RSS | reclaim, swap activity | OOM, major faults |
-| Disk | `iostat -x` | `await`, queue depth | `dmesg` I/O errors |
-| Network | `sar -n DEV` | `ss -s` | `netstat -s` |
+| CPU | `top`, `mpstat` | `vmstat r`, load average | throttling, involuntary context switches |
+| Memory | RSS, `free -m`, cgroup usage | reclaim, swap, major faults | OOM events |
+| Disk | `%util`, throughput | `await`, queue depth | device or fs errors |
+| Network | bandwidth, socket counts | backlog, retransmits | resets, drops |
 
-USE is valuable precisely because it is boring. It forces you to
-consider every resource, not just the one you already suspect.
-"CPU is at 40 %, so it is not a CPU problem" is a common wrong answer
-— the utilization is fine, but the *saturation* (runqueue length,
-involuntary context switches) might not be. USE checks both.
+The strength of USE is that it prevents tunnel vision. Engineers often jump
+straight to their favorite theory: "must be CPU," "must be the database,"
+"must be the network." USE forces you to cover the resource surface before
+narrowing.
 
-### USE for memory, in detail
+A useful discipline in modern systems is to write down two plausible
+hypotheses before diving deeper. For example:
 
-Memory is the workhorse of tail latency outages, so it is worth
-expanding:
+1. memory pressure is causing major faults;
+2. CPU saturation is causing runqueue delay.
 
-- **Utilization.** Process RSS, `free -m`, or in a container
-  `memory.current` from cgroup v2. High by itself is not an error —
-  Linux will happily use all your RAM for the page cache.
-- **Saturation.** Reclaim activity (`pgscan_*` counters), swap in/out,
-  direct reclaim stalls. This is where memory pressure first
-  becomes visible.
-- **Errors.** OOM-kill events in `dmesg`, and — the most important
-  one for tail latency — **major page faults** (`pgmajfault`). A major
-  fault is a rare, expensive event that looks exactly like a p99 slow
-  path should look.
+Then collect evidence for one and an exclusion check for the other.
 
-The case study in the next section walks through the full chain.
+## 3.5 Evidence Chains Beat Hunches
 
-## 3.5 Building Evidence Chains
+One signal is a hypothesis. Two supporting signals plus one exclusion check is
+a diagnosis you can defend.
 
-A single signal is a hypothesis. Two independent signals that agree
-is a credible diagnosis. One signal plus an exclusion check that
-rules out an alternative is better still. The rule of thumb in this
-book: **two supporting signals + one exclusion check.**
+A good evidence chain has this form:
 
-Why "independent"? Because correlated signals do not prove anything
-beyond what one of them already showed. `top` and `vmstat r` both
-read CPU utilization — they are the same signal twice. `pgmajfault`
-from `/proc/vmstat` and major faults from `/usr/bin/time -v` cover
-the same mechanism from two different vantage points — one is a
-system-wide counter, the other is per-process, and each could
-disagree with the other for instructive reasons.
+1. **Symptom:** p99 rose from 5 ms to 180 ms at 01:47.
+2. **Hypothesis:** memory pressure is forcing major faults.
+3. **Signal 1:** memory usage is near the cgroup limit.
+4. **Signal 2:** `pgmajfault` or per-process major faults increased sharply.
+5. **Exclusion:** CPU runqueue and disk queue depth stayed near baseline.
+6. **Mechanism:** faulting requests block on page supply, inflating only the
+   tail.
+7. **Fix:** raise limit, reduce working set, or protect hot data.
+8. **Verification:** tail recovers and the mechanism-aligned signal returns
+   toward baseline.
 
-An evidence chain looks like this:
+The exclusion step is where many weak write-ups fail. Without it, you do not
+have a diagnosis; you have a plausible story.
 
-1. **Symptom.** p99 latency rose from 2 ms to 150 ms at 01:47.
-2. **Hypothesis.** Memory pressure → major faults → tail spike.
-3. **Signal 1.** `memory.current` sits at 95 % of `memory.max`.
-4. **Signal 2.** `pgmajfault` increased 20× over baseline.
-5. **Exclusion.** CPU utilization and `iostat` queue depth unchanged
-   (rules out CPU saturation and disk contention as the primary
-   mechanism).
-6. **Diagnosis.** Memory pressure is forcing reclaim, and re-accessed
-   pages cause major faults, which block requests long enough to
-   appear as p99 outliers.
-7. **Fix.** Raise `memory.max` to 1 Gi.
-8. **Verification.** After the fix, `pgmajfault` returns to baseline
-   and p99 drops from 150 ms to 5 ms.
+A short operational example:
 
-A report without step 5 is a story. A report with step 5 is a
-diagnosis.
+| Claim | Supporting signal | Independent supporting signal | Excluded alternative |
+|---|---|---|---|
+| memory pressure drives the tail | `memory.current` near `memory.max` | `pgmajfault` spike | CPU saturation |
+| CPU runqueue drives the tail | high `vmstat r` | scheduler delay trace | storage queueing |
+| network is **not** the root cause | stable retransmits | stable socket backlog | misleading timeout symptoms |
 
-## 3.6 Case Study: Memory Pressure and p99 Spikes
+![Workflow diagram from symptom to hypotheses, two supporting signals, exclusion check, diagnosis, mitigation, and verification](figures/evidence-chain.svg)
+*Figure 3.4: The target structure for an incident write-up is symptom → hypotheses → two supporting signals → one exclusion check → diagnosis → mitigation and verification. The exclusion step is what turns a plausible story into a defensible one.*
 
-The alert arrives at 2 AM:
+## 3.6 Worked Incident: Memory Pressure and p99 Spikes
+
+Imagine this alert:
 
 ```text
 Service: order-service
-Alert:   p99 latency > 500 ms (threshold: 100 ms)
-Started: 01:47
-Affected: ~1 % of requests
+Alert:   p99 latency > 500 ms (baseline: 20 ms)
+Start:   01:47
+Impact:  ~1% of requests
 ```
 
-The 1 % figure is already informative — something rare is happening.
+That "~1%" is already a clue. The fast path still works. A rare slow path is
+firing.
 
-**Step 0. Do not panic.** Before touching anything, ask three
-questions: is this affecting users (errors, timeouts)? Is it getting
-worse? Did anything change (deploy, config, traffic)? In this
-scenario: errors normal, no deploys, traffic steady.
+### Step 1: USE pass
 
-**Step 1. Frame the resources with USE.** A quick pass across CPU,
-memory, disk, network. The memory column lights up:
+A quick sweep shows memory is the suspicious resource.
 
 ```bash
 $ free -m
-                total        used        free      available
-Mem:            1024         960          10             45
+              total   used   free   available
+Mem:           1024    960     10          45
 ```
 
-Memory usage is 95 % of the limit. That is utilization. Is there
-saturation or are there errors?
+High utilization alone is not enough, so keep going.
 
-**Step 2. Form hypotheses.** High memory could mean a leak (usage
-trending up), a traffic spike (more concurrent requests), a noisy
-neighbor (shared host pressure), or a too-tight limit (app needs
-more headroom). Pick the two most plausible, investigate both,
-exclude one before committing.
-
-**Step 3. Check the fault counter.** This is the decisive signal for
-memory-driven tail latency:
+### Step 2: Check the fault path
 
 ```bash
-$ cat /proc/vmstat | egrep "pgmajfault|pgfault"
-pgfault       81219310
-pgmajfault       34127
+$ grep -E 'pgfault|pgmajfault' /proc/vmstat
+pgfault    81219310
+pgmajfault    34127
 ```
 
-Compared to baseline (`pgmajfault ≈ 3 000`), major faults are up
-about 10×. Now we have a mechanism candidate.
+If baseline `pgmajfault` was roughly 3,000 for the same interval, this is a
+strong signal that the slow path involves storage-backed page supply rather
+than ordinary compute.
 
-**Step 4. Construct the chain.**
-
-1. Memory utilization is near the limit.
-2. The kernel reclaims pages to stay under `memory.max`.
-3. Later accesses to those pages trigger **major faults**.
-4. A major fault goes off-CPU for disk I/O; the scheduler runs
-   something else; the request's clock keeps ticking.
-5. The resulting wait inflates the tail, but only for requests that
-   happen to touch a reclaimed page — hence "1 %".
-
-This is why p50 looks fine: most requests never trigger the slow
-path. The fast path is still the fast path.
-
-**Step 5. Verify with an exclusion.** `iostat -x 1 5` shows disk
-queue depth and `%util` unchanged outside brief bursts coincident
-with the faults — the disk is not the primary bottleneck; it is
-downstream of the memory pressure. Ruling out "disk saturation" as
-the root cause strengthens the memory-pressure hypothesis.
-
-**Step 6. Fix and verify.**
+### Step 3: Exclude the obvious rival
 
 ```bash
-kubectl set resources deployment/order-service --limits=memory=1Gi
+$ vmstat 1 5
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 1  0 346112  67584  18432 319488    8   12   210   120  610  980 18  3 78  1  0
 ```
 
-Watch for:
+Runqueue length is not elevated enough to make CPU saturation the primary
+story. That does not prove CPU is irrelevant, but it weakens it as the root
+cause.
 
-- `memory.current / memory.max` drops below 80 %.
-- `pgmajfault` rate returns to baseline.
-- p99 recovers to around 5 ms within a few minutes.
+### Step 4: State the mechanism
 
-No before/after measurement = no confidence in the fix.
+The causal chain is:
 
-**Step 7. Prevent recurrence.** Short term: alert on
-`memory.current / memory.max` and on `pgmajfault` rate. Long term:
-right-size limits in staging with a realistic workload; reduce the
-working set by improving locality or caching.
+1. the service runs close to its memory limit;
+2. the kernel reclaims pages to stay within the limit;
+3. some later requests touch reclaimed pages;
+4. those requests incur major faults and wait off-CPU for page supply;
+5. only the unlucky requests that hit reclaimed data enter the tail.
 
-The case study matches the structure you will use in every oncall
-write-up in this book: symptom → hypothesis → evidence → mechanism →
-fix → verification. The lab turns this template into a simulated
-oncall shift.
+That explains the observed shape: p50 remains acceptable while p99 spikes.
+
+### Step 5: Mitigate and verify
+
+A production-minded response is not just "raise the limit." It is:
+
+- apply the least risky mitigation first, such as modestly raising
+  `memory.max`;
+- watch both the user-facing metric and the mechanism-aligned signal;
+- confirm that p99 and `pgmajfault` move together in the expected direction.
+
+An example before/after table makes the verification logic explicit:
+
+| Metric | Before | After |
+|---|---:|---:|
+| p50 latency | 3 ms | 3 ms |
+| p99 latency | 540 ms | 18 ms |
+| `pgmajfault` / min | 1,200 | 25 |
+| `memory.current / memory.max` | 95% | 72% |
+
+The exact numbers will differ in real incidents. The structure should not.
 
 ## Summary
 
 Key takeaways from this chapter:
 
-- The mean is a misleading number for a distribution with a long
-  tail. Percentiles, especially p99, are what production systems
-  live or die on. Tail amplification means a page with a hundred
-  backend calls hits the p99 on ~63 % of loads.
-- p99 latency is almost always an OS slow path: runqueue delay,
-  blocking I/O, page faults, or lock contention. Find the queue,
-  find the slow path.
-- The USE method (Utilization, Saturation, Errors) is a coverage
-  algorithm that forces you to consider every resource, not just
-  the one you already suspect.
-- A credible diagnosis needs at least two independent supporting
-  signals plus one exclusion check. Two correlated signals is still
-  one signal.
-- Always verify a fix with before/after measurements. A fix you did
-  not measure is a hope, not a fix.
+- Tail latency is usually a rare slow path with a large waiting cost, not a
+  uniform slowdown of all requests.
+- Percentiles require enough samples and a measurement method that does not
+  hide the worst periods through coordinated omission.
+- The USE method is valuable because it enforces coverage across CPU,
+  memory, storage, and network before you narrow.
+- Strong incident analysis requires two supporting signals and one explicit
+  exclusion check. Without the exclusion, the write-up is still vulnerable.
+- The best fixes are verified with both a user-facing metric and a
+  mechanism-facing metric.
 
 ## Further Reading
 
 - Dean, J. & Barroso, L. A. (2013). The Tail at Scale. *CACM* 56(2).
-- Gregg, B. (2013). *The USE Method.*
+- Gregg, B. (2020). *Systems Performance*, 2nd ed. Chapter 2.
+- Gregg, B. *The USE Method.*
   <https://www.brendangregg.com/usemethod.html>
-- Gregg, B. (2020). *Systems Performance*, 2nd ed. Chapter 2:
-  Methodology.
-- Tene, G. *How NOT to Measure Latency*.
+- Tene, G. *How NOT to Measure Latency.*
   <https://www.youtube.com/watch?v=lJ8ydIuPFeU>
 - HdrHistogram: <https://github.com/HdrHistogram/HdrHistogram>
-- Linux kernel, `man 5 proc` — the `/proc/vmstat` counters.
-- Linux cgroup v2 memory controller:
-  <https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html>

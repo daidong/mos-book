@@ -54,3 +54,6 @@ results/
 # Environment files
 .env
 .env.local
+
+# Local tool state (session data, caches, etc.)
+.research-pilot/

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520">
+  <style>
+    .t{font: 18px sans-serif; fill:#111}
+    .h{font: 26px sans-serif; font-weight:700; fill:#111}
+    .s{font: 15px sans-serif; fill:#111}
+    .mono{font: 14px monospace; fill:#111}
+  </style>
+
+  <!-- Title -->
+  <text x="550" y="35" text-anchor="middle" class="h">From Pod Spec to Cgroup Files</text>
+
+  <!-- Pod YAML column -->
+  <rect x="30" y="60" width="300" height="420" rx="12" fill="#e8f0fe" stroke="#4285f4" stroke-width="2"/>
+  <text x="180" y="90" text-anchor="middle" class="t" font-weight="700" fill="#1a73e8">Pod Spec (YAML)</text>
+
+  <text x="55" y="125" class="mono">resources:</text>
+  <text x="55" y="148" class="mono">  requests:</text>
+  <text x="55" y="171" class="mono">    cpu: "500m"</text>
+  <text x="55" y="194" class="mono">    memory: "256Mi"</text>
+  <text x="55" y="220" class="mono">  limits:</text>
+  <text x="55" y="243" class="mono">    cpu: "1000m"</text>
+  <text x="55" y="266" class="mono">    memory: "512Mi"</text>
+
+  <line x1="55" y1="285" x2="310" y2="285" stroke="#4285f4" stroke-width="1" stroke-dasharray="4"/>
+
+  <text x="55" y="310" class="s" font-weight="700">QoS Class: Burstable</text>
+  <text x="55" y="335" class="s">(requests ≠ limits)</text>
+
+  <text x="55" y="370" class="s" font-weight="700">Scheduler sees:</text>
+  <text x="55" y="393" class="s">0.5 CPU, 256 MiB reserved</text>
+
+  <text x="55" y="428" class="s" font-weight="700">Kernel enforces:</text>
+  <text x="55" y="451" class="s">1.0 CPU max, 512 MiB max</text>
+
+  <!-- Arrow: Pod → kubelet -->
+  <path d="M 335 250 L 405 250" fill="none" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="370" y="237" text-anchor="middle" class="s">kubelet</text>
+  <text x="370" y="255" text-anchor="middle" class="s">translates</text>
+
+  <!-- Cgroup files column -->
+  <rect x="410" y="60" width="320" height="420" rx="12" fill="#fef7e0" stroke="#f9ab00" stroke-width="2"/>
+  <text x="570" y="90" text-anchor="middle" class="t" font-weight="700" fill="#e37400">Cgroup v2 Files</text>
+
+  <text x="435" y="130" class="mono">/sys/fs/cgroup/kubepods/</text>
+  <text x="435" y="153" class="mono">  pod-&lt;uid&gt;/</text>
+
+  <rect x="435" y="170" width="270" height="35" rx="6" fill="#fff3cd" stroke="#f9ab00"/>
+  <text x="445" y="193" class="mono">cpu.max = "100000 100000"</text>
+
+  <rect x="435" y="215" width="270" height="35" rx="6" fill="#fff3cd" stroke="#f9ab00"/>
+  <text x="445" y="238" class="mono">memory.max = 536870912</text>
+
+  <rect x="435" y="260" width="270" height="35" rx="6" fill="#fff3cd" stroke="#f9ab00"/>
+  <text x="445" y="283" class="mono">cgroup.procs = &lt;container PID&gt;</text>
+
+  <line x1="435" y1="310" x2="710" y2="310" stroke="#f9ab00" stroke-width="1" stroke-dasharray="4"/>
+
+  <text x="435" y="340" class="s" font-weight="700">cpu.max arithmetic:</text>
+  <text x="435" y="363" class="s">1000m → quota 100000 / period 100000</text>
+  <text x="435" y="386" class="s">= 100% of one core per period</text>
+
+  <text x="435" y="420" class="s" font-weight="700">memory.max arithmetic:</text>
+  <text x="435" y="443" class="s">512Mi → 512 × 1024² = 536870912 bytes</text>
+
+  <!-- Arrow: cgroup → kernel -->
+  <path d="M 735 250 L 805 250" fill="none" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="770" y="237" text-anchor="middle" class="s">Linux</text>
+  <text x="770" y="255" text-anchor="middle" class="s">enforces</text>
+
+  <!-- Kernel enforcement column -->
+  <rect x="810" y="60" width="260" height="420" rx="12" fill="#e6f4ea" stroke="#34a853" stroke-width="2"/>
+  <text x="940" y="90" text-anchor="middle" class="t" font-weight="700" fill="#1e8e3e">Kernel Mechanism</text>
+
+  <rect x="830" y="115" width="220" height="80" rx="8" fill="#ceead6" stroke="#34a853"/>
+  <text x="940" y="145" text-anchor="middle" class="s" font-weight="700">CFS Bandwidth Control</text>
+  <text x="940" y="168" text-anchor="middle" class="s">Throttles when quota</text>
+  <text x="940" y="185" text-anchor="middle" class="s">exhausted in period</text>
+
+  <rect x="830" y="210" width="220" height="80" rx="8" fill="#ceead6" stroke="#34a853"/>
+  <text x="940" y="240" text-anchor="middle" class="s" font-weight="700">Memory Accounting</text>
+  <text x="940" y="263" text-anchor="middle" class="s">Reclaim → OOM kill</text>
+  <text x="940" y="280" text-anchor="middle" class="s">if usage > memory.max</text>
+
+  <rect x="830" y="305" width="220" height="70" rx="8" fill="#ceead6" stroke="#34a853"/>
+  <text x="940" y="335" text-anchor="middle" class="s" font-weight="700">Observe via</text>
+  <text x="940" y="358" text-anchor="middle" class="mono">cpu.stat, memory.events</text>
+
+  <rect x="830" y="390" width="220" height="70" rx="8" fill="#fce8e6" stroke="#ea4335"/>
+  <text x="940" y="418" text-anchor="middle" class="s" font-weight="700" fill="#c5221f">Failure modes</text>
+  <text x="940" y="441" text-anchor="middle" class="s">Throttle → p99 spike</text>
+  <text x="940" y="455" text-anchor="middle" class="s">OOM → exit code 137</text>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#333"/>
+    </marker>
+  </defs>
+</svg>

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460">
+  <defs>
+    <style>
+      .title { font: 700 28px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 16px Arial, Helvetica, sans-serif; fill: #475569; }
+      .boxtitle { font: 700 20px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .body { font: 500 15px Arial, Helvetica, sans-serif; fill: #334155; }
+      .pill { font: 700 14px Arial, Helvetica, sans-serif; fill: white; }
+      .arrowlabel { font: 700 14px Arial, Helvetica, sans-serif; fill: #475569; }
+    </style>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#94a3b8" flood-opacity="0.28"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="460" fill="#f8fafc"/>
+  <text x="40" y="44" class="title">The same write becomes safer as it moves right</text>
+  <text x="40" y="72" class="subtitle">Each step strengthens the guarantee, but also adds work before the system can honestly say OK.</text>
+
+  <line x1="210" y1="180" x2="260" y2="180" stroke="#94a3b8" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="440" y1="180" x2="490" y2="180" stroke="#94a3b8" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="670" y1="180" x2="720" y2="180" stroke="#94a3b8" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="900" y1="180" x2="950" y2="180" stroke="#94a3b8" stroke-width="6" marker-end="url(#arrow)"/>
+
+  <text x="222" y="155" class="arrowlabel">copy</text>
+  <text x="454" y="155" class="arrowlabel">flush</text>
+  <text x="682" y="155" class="arrowlabel">apply</text>
+  <text x="914" y="155" class="arrowlabel">replicate</text>
+
+  <g filter="url(#shadow)">
+    <rect x="30" y="110" rx="24" ry="24" width="180" height="140" fill="#dbeafe" stroke="#60a5fa" stroke-width="3"/>
+    <rect x="55" y="272" rx="18" ry="18" width="130" height="36" fill="#ef4444"/>
+    <text x="60" y="150" class="boxtitle">User buffer</text>
+    <text x="60" y="178" class="body">Only the application</text>
+    <text x="60" y="200" class="body">knows the new value.</text>
+    <text x="60" y="228" class="body">Nothing durable yet.</text>
+    <text x="83" y="295" class="pill">process crash</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="260" y="110" rx="24" ry="24" width="180" height="140" fill="#e0f2fe" stroke="#38bdf8" stroke-width="3"/>
+    <rect x="279" y="272" rx="18" ry="18" width="142" height="36" fill="#f97316"/>
+    <text x="290" y="150" class="boxtitle">Page cache</text>
+    <text x="290" y="178" class="body">Kernel accepted the</text>
+    <text x="290" y="200" class="body">write in RAM.</text>
+    <text x="290" y="228" class="body">Fast, but volatile.</text>
+    <text x="304" y="295" class="pill">power loss</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="110" rx="24" ry="24" width="180" height="140" fill="#dcfce7" stroke="#22c55e" stroke-width="3"/>
+    <rect x="506" y="272" rx="18" ry="18" width="148" height="36" fill="#16a34a"/>
+    <text x="520" y="150" class="boxtitle">Local WAL</text>
+    <text x="520" y="178" class="body">Intent is on stable</text>
+    <text x="520" y="200" class="body">storage for one node.</text>
+    <text x="520" y="228" class="body">Crash recovery is possible.</text>
+    <text x="532" y="295" class="pill">disk or node loss</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="720" y="110" rx="24" ry="24" width="180" height="140" fill="#ede9fe" stroke="#8b5cf6" stroke-width="3"/>
+    <rect x="737" y="272" rx="18" ry="18" width="146" height="36" fill="#7c3aed"/>
+    <text x="750" y="150" class="boxtitle">Home location</text>
+    <text x="750" y="178" class="body">Main structure reflects</text>
+    <text x="750" y="200" class="body">the write after replay.</text>
+    <text x="750" y="228" class="body">Still only one machine.</text>
+    <text x="759" y="295" class="pill">machine loss</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="950" y="110" rx="24" ry="24" width="220" height="140" fill="#fef3c7" stroke="#f59e0b" stroke-width="3"/>
+    <rect x="990" y="272" rx="18" ry="18" width="140" height="36" fill="#d97706"/>
+    <text x="980" y="150" class="boxtitle">Quorum committed</text>
+    <text x="980" y="178" class="body">Enough replicas can carry</text>
+    <text x="980" y="200" class="body">the write through failover.</text>
+    <text x="980" y="228" class="body">This is distributed safety.</text>
+    <text x="1010" y="295" class="pill">larger quorum failure</text>
+  </g>
+
+  <text x="40" y="360" class="subtitle">Teaching point: “written” is not one event. It is a sequence of states with different failure assumptions.</text>
+  <text x="40" y="388" class="subtitle">Week 9 mostly lived on the left half. Week 10A moves the safety boundary to the quorum on the right.</text>
+</svg>

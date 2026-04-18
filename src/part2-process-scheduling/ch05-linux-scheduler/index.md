@@ -58,6 +58,9 @@ Linux stores runnable tasks in a per-CPU **red-black tree** ordered
 by `vruntime`. "Smallest `vruntime`" is the leftmost node — an O(log
 n) lookup, fast enough for the scheduling hot path.
 
+![CFS data structures: the per-CPU rq contains a cfs_rq with a red-black tree of sched_entity nodes ordered by vruntime; the leftmost node is the next to run](figures/cfs_structs_rq_cfsrq_se.svg)
+*Figure 5.1: CFS data structures. Each CPU's `rq` contains a `cfs_rq` with a red-black tree of scheduling entities ordered by `vruntime`. The leftmost node — the most under-served task — is the next to run.*
+
 ### Nice, weight, and CPU share
 
 The `nice` values you can set correspond to a lookup table of
@@ -107,6 +110,9 @@ model is a small generalization of classical CFS:
 deadline as a more principled way to pick among eligible tasks.
 Practical consequences for this book:
 
+![Intuition for vruntime, eligible tasks, and deadlines: Task A has high vruntime (well-served), Task B just woke with low vruntime and earliest deadline, so the scheduler picks B](figures/vruntime_eligible_deadline_intuition.png)
+*Figure 5.2: EEVDF intuition. Three tasks with different vruntime values. Task B just woke with the lowest vruntime and the earliest virtual deadline, so the scheduler picks it next. The eligible set excludes tasks that have been over-served relative to their weight.*
+
 - Existing scheduler tracepoints (`sched_wakeup`, `sched_switch`,
   `sched_migrate_task`) continue to work — they observe events, not
   internal function names.
@@ -130,6 +136,9 @@ When a task becomes runnable, four things happen:
    Deadline (`SCHED_DEADLINE`), Realtime (`SCHED_FIFO`/`SCHED_RR`),
    Fair (normal tasks), Idle — and the first class with a runnable
    task wins. Almost everything in userspace is Fair.
+
+![Scheduling class chain: pick_next_task walks Deadline → Realtime → Fair → Idle, selecting the first class with a runnable task](figures/sched_class_chain_pick_next_task.svg)
+*Figure 5.3: The scheduling class chain. `pick_next_task` walks the classes in strict priority order. Deadline and Realtime always preempt Fair; almost all user-space work lives in the Fair class.*
 4. **Switch.** A context switch delivers CPU to the chosen task,
    generating `sched:sched_switch`.
 
@@ -149,6 +158,31 @@ The simplest first-order predictor of scheduling latency is **how
 many runnable tasks share the CPU, weighted by their weights**. That
 is exactly the number you can estimate from the tracepoints in the
 next section.
+
+### sched_ext: eBPF-based scheduling classes (Linux 6.12+)
+
+Starting with Linux 6.12 (late 2024), the kernel supports
+**sched_ext** — a framework for writing entire scheduling policies
+as eBPF programs. Instead of observing the scheduler from outside,
+sched_ext lets you *replace* the Fair class's pick logic with a BPF
+program that the verifier checks at load time.
+
+Why this matters for this book:
+
+- It validates the chapter's separation of policy and mechanism.
+  sched_ext keeps the kernel's context-switch and runqueue
+  mechanism intact; only the pick-next-task policy is pluggable.
+- Production users (Meta, Google) are already deploying sched_ext
+  policies for workload-specific scheduling: latency-sensitive
+  front-ends get one policy, batch GPU jobs get another, all on the
+  same kernel.
+- The tracepoints this chapter teaches (`sched_wakeup`,
+  `sched_switch`) still work under sched_ext, so nothing in the
+  lab changes.
+
+We will not write a sched_ext scheduler in this book, but
+understanding CFS/EEVDF is a prerequisite for understanding what
+sched_ext replaces and why.
 
 ## 5.3 Tracing the Scheduler with eBPF
 
@@ -222,6 +256,9 @@ result in kernel memory without streaming every event to userspace.
 **Cleanup.** `delete(@map[key])` removes one entry; `clear(@map)`
 empties the whole map.
 
+![eBPF tracing measurement pattern: Event 1 (sched_wakeup) stores a timestamp in a BPF map; Event 2 (sched_switch) looks up the timestamp, computes the delta, and stores the result in an in-kernel histogram; user space reads aggregates](figures/ebpf_latency_recipe.png)
+*Figure 5.4: The "two events + one state" eBPF recipe. `sched_wakeup` records a timestamp; `sched_switch` computes the delta and pushes it to an in-kernel histogram. User space reads the aggregated result — no per-event streaming required.*
+
 Together those idioms express the canonical scheduler-latency
 script, which is small enough to memorize:
 
@@ -268,6 +305,36 @@ tracepoint:sched:sched_switch / @ts[args->next_pid] / {
 
 Produces one histogram per `comm`, so you can see which program is
 living in the tail.
+
+### A production debugging example
+
+A concrete use of the recipe above: an inference-serving team sees
+p99 latency spike from 12 ms to 80 ms on a 64-core host at ~40 %
+average CPU. They attach a one-liner:
+
+```bash
+sudo bpftrace -e '
+  tracepoint:sched:sched_wakeup /comm == "infer-worker"/ {
+      @ts[args->pid] = nsecs;
+  }
+  tracepoint:sched:sched_switch /comm == "infer-worker" && @ts[args->next_pid]/ {
+      @lat_us = hist((nsecs - @ts[args->next_pid]) / 1000);
+      delete(@ts[args->next_pid]);
+  }
+  interval:s:10 { exit(); }
+'
+```
+
+The histogram shows a bimodal distribution: most wakeups land in
+1–5 µs, but ~2 % land in 2–8 ms. Cross-referencing with
+`sched:sched_migrate_task`, those slow wakeups correlate with
+cross-NUMA migrations triggered by a log-shipping cgroup that
+periodically saturates one socket. Pinning the inference workers to
+NUMA node 0 via `numactl --cpunodebind=0` eliminates the tail.
+
+The point: the recipe (two events, one piece of state) is not a
+classroom exercise. It is the standard first step in production
+scheduler debugging.
 
 ### When bpftrace is not enough
 

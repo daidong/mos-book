@@ -41,6 +41,9 @@ and asks the container runtime (containerd, CRI-O) to launch the
 containers inside. Everything else — networking, volumes, service
 discovery — is orchestration on top of those cgroup writes.
 
+![Diagram showing the translation from Pod spec YAML (requests, limits) through kubelet writes to cgroup v2 files (cpu.max, memory.max) to kernel enforcement mechanisms (CFS bandwidth, memory accounting)](figures/qos-cgroup-mapping.svg)
+*Figure 7.1: The translation chain from Pod spec to kernel enforcement. The YAML resource fields become cgroup control files; the kernel mechanisms Chapter 6 introduced do the actual work. "Kubernetes decides, kubelet translates, Linux enforces."*
+
 A useful sentence to repeat: **Kubernetes decides, `kubelet`
 translates, Linux enforces.** Each layer has its own job, and most
 incident investigations can be categorized by which layer owns the
@@ -130,6 +133,9 @@ consumes its quota, hits the wall, and stops *hard* until the next
 period. A request that arrives during the throttled window sees the
 process go off-CPU for up to 100 ms at a time — a classic tail-
 latency killer.
+
+![CFS throttling timeline: a Pod with cpu.max 50000/100000 runs for 50 ms then is throttled for 50 ms each period; a request arriving during the throttled window waits until the next period](figures/cfs-throttling-timeline.svg)
+*Figure 7.2: CFS bandwidth throttling in action. A Pod with `limits.cpu: "500m"` gets 50 ms of CPU per 100 ms period. When it exhausts the quota, it stops hard. A request arriving during the throttled window pays the full remaining wait — this is where the tail latency comes from.*
 
 The kernel exposes the pain through `cpu.stat`:
 

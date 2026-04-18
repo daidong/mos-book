@@ -71,6 +71,9 @@ scheduler and kubelet.
   (reconciles)         (places Pods)                   (enforces via cgroups)
 ```
 
+![Kubernetes architecture: user interface and kubectl connect to the control plane (API server, scheduler, controller-manager, etcd), which manages worker nodes each running kubelet, kube-proxy, and Pods](figures/kubernetes-architecture.png)
+*Figure 9.1: Kubernetes control plane and worker node architecture. All components communicate through the API server; etcd provides the durable, consistent backing store.*
+
 ### Who does what
 
 - **API server.** The only component that talks to etcd. Validates

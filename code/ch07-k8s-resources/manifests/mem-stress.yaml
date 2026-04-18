@@ -1,7 +1,8 @@
-# Lab 5 Option B: Memory OOM Experiment
+# Lab 5 Part C: Memory OOM Experiment
 #
-# This pod has a tight memory limit (64Mi)
-# When you allocate more than that, the container will be OOMKilled.
+# This Pod has a 128 MiB memory limit and auto-starts a program
+# that tries to allocate 256 MiB.  The kernel will OOM-kill the
+# process once usage hits memory.max.
 
 apiVersion: v1
 kind: Pod
@@ -14,18 +15,33 @@ spec:
   containers:
   - name: stress
     image: ubuntu:22.04
-    command: ["sleep", "infinity"]
+    command:
+    - /bin/bash
+    - -c
+    - |
+      echo "Allocating 256 MiB in a 128 MiB cgroup..."
+      # Allocate in 4 MiB steps so the OOM is visible
+      python3 -c "
+      import time
+      blocks = []
+      for i in range(64):
+          blocks.append(bytearray(4 * 1024 * 1024))
+          print(f'Allocated {(i+1)*4} MiB', flush=True)
+          time.sleep(0.2)
+      print('Done — should have been killed by now')
+      " 2>&1 || echo "Process killed (expected)"
+      sleep infinity
     resources:
       requests:
-        memory: "64Mi"
+        memory: "128Mi"
         cpu: "50m"
       limits:
-        memory: "64Mi"   # Tight limit - will OOM if exceeded
+        memory: "128Mi"   # OOM will fire well before 256 MiB
         cpu: "100m"
-  restartPolicy: Always   # Kubelet will restart after OOM
+  restartPolicy: Always    # Kubelet restarts → CrashLoopBackOff
 
 ---
-# Higher limit variant for comparison
+# Higher-limit variant for comparison (Part C follow-up)
 apiVersion: v1
 kind: Pod
 metadata:
@@ -37,12 +53,26 @@ spec:
   containers:
   - name: stress
     image: ubuntu:22.04
-    command: ["sleep", "infinity"]
+    command:
+    - /bin/bash
+    - -c
+    - |
+      echo "Allocating 256 MiB in a 512 MiB cgroup (should succeed)..."
+      python3 -c "
+      import time
+      blocks = []
+      for i in range(64):
+          blocks.append(bytearray(4 * 1024 * 1024))
+          print(f'Allocated {(i+1)*4} MiB', flush=True)
+          time.sleep(0.2)
+      print('Done — no OOM expected')
+      time.sleep(3600)
+      "
     resources:
       requests:
-        memory: "64Mi"
+        memory: "128Mi"
         cpu: "50m"
       limits:
-        memory: "256Mi"   # More headroom
+        memory: "512Mi"    # Plenty of headroom
         cpu: "100m"
   restartPolicy: Always

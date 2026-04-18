@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Modern OS stack from control plane to hardware</title>
+  <desc id="desc">A layered diagram showing control plane, user-space runtimes, kernel, and hardware, with examples and the main question each layer answers.</desc>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .title { font: 700 34px Arial, Helvetica, sans-serif; fill: #1f2937; }
+      .subtitle { font: 400 18px Arial, Helvetica, sans-serif; fill: #4b5563; }
+      .layerTitle { font: 700 24px Arial, Helvetica, sans-serif; fill: #111827; }
+      .body { font: 400 18px Arial, Helvetica, sans-serif; fill: #1f2937; }
+      .small { font: 400 16px Arial, Helvetica, sans-serif; fill: #374151; }
+      .calloutTitle { font: 700 18px Arial, Helvetica, sans-serif; fill: #111827; }
+      .callout { font: 400 17px Arial, Helvetica, sans-serif; fill: #374151; }
+      .outline { stroke: #374151; stroke-width: 2; }
+      .thin { stroke: #6b7280; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="720" />
+  <text class="title" x="70" y="62">Modern systems still reduce to a small number of OS layers</text>
+  <text class="subtitle" x="70" y="95">The labels change across cloud, containers, and AI tooling; the mechanisms stay anchored in kernel and hardware behavior.</text>
+
+  <rect x="90" y="145" rx="18" ry="18" width="700" height="110" fill="#d8eef8" class="outline" />
+  <rect x="90" y="275" rx="18" ry="18" width="700" height="110" fill="#d8f3ea" class="outline" />
+  <rect x="90" y="405" rx="18" ry="18" width="700" height="110" fill="#fde9c8" class="outline" />
+  <rect x="90" y="535" rx="18" ry="18" width="700" height="110" fill="#f8d9dc" class="outline" />
+
+  <text class="layerTitle" x="120" y="188">Control plane</text>
+  <text class="body" x="120" y="220">Kubernetes scheduler, controllers, autoscalers, deployment policy</text>
+  <text class="small" x="120" y="245">What should run where, with which limits, and when should the system react?</text>
+
+  <text class="layerTitle" x="120" y="318">User-space runtimes</text>
+  <text class="body" x="120" y="350">Language runtime, container runtime, sidecars, local agents and daemons</text>
+  <text class="small" x="120" y="375">How is the application packaged, started, instrumented, or sandboxed?</text>
+
+  <text class="layerTitle" x="120" y="448">Kernel</text>
+  <text class="body" x="120" y="480">Scheduler, virtual memory, VFS, network stack, namespaces, cgroups</text>
+  <text class="small" x="120" y="505">Which mechanism enforces the resource decision or handles the fault, queue, or syscall?</text>
+
+  <text class="layerTitle" x="120" y="578">Hardware</text>
+  <text class="body" x="120" y="610">Cores, caches, MMU, memory channels, NICs, storage devices</text>
+  <text class="small" x="120" y="635">What physical limit or execution cost ultimately determines latency or throughput?</text>
+
+  <line x1="440" y1="255" x2="440" y2="275" class="thin" />
+  <line x1="440" y1="385" x2="440" y2="405" class="thin" />
+  <line x1="440" y1="515" x2="440" y2="535" class="thin" />
+
+  <rect x="845" y="160" rx="16" ry="16" width="285" height="120" fill="#f9fafb" class="outline" />
+  <text class="calloutTitle" x="870" y="195">Example translation</text>
+  <text class="callout" x="870" y="225">“Pod throttled” → cgroup CPU</text>
+  <text class="callout" x="870" y="249">quota and scheduler behavior</text>
+
+  <rect x="845" y="315" rx="16" ry="16" width="285" height="120" fill="#f9fafb" class="outline" />
+  <text class="calloutTitle" x="870" y="350">Example translation</text>
+  <text class="callout" x="870" y="380">“Service timeout” → queueing,</text>
+  <text class="callout" x="870" y="404">socket wait, or blocked peer</text>
+
+  <rect x="845" y="470" rx="16" ry="16" width="285" height="140" fill="#f9fafb" class="outline" />
+  <text class="calloutTitle" x="870" y="505">Reading habit</text>
+  <text class="callout" x="870" y="535">Separate policy from mechanism.</text>
+  <text class="callout" x="870" y="559">Ask which layer owns the</text>
+  <text class="callout" x="870" y="583">decision and which layer pays</text>
+  <text class="callout" x="870" y="607">the execution cost.</text>
+</svg>

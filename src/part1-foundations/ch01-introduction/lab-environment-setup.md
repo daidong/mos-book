@@ -1,127 +1,138 @@
 # Lab: Environment Setup
 
-> **Estimated time:** 2-3 hours
+> **Estimated time:** 2–3 hours
 >
-> **Prerequisites:** VirtualBox installed, Ubuntu 22.04 or 24.04 ISO
+> **Prerequisites:** VirtualBox, UTM, or another VM platform; Ubuntu
+> 22.04 or 24.04 image
 >
-> **Tools used:** VirtualBox, apt, perf, strace, gcc
+> **Tools used:** `apt`, `gcc`, `make`, `strace`, `perf`,
+> `/usr/bin/time`, Valgrind
 
 ## Objectives
 
-- Set up an Ubuntu VM suitable for all labs in this book
-- Install and verify core observability tools (perf, strace, bpftrace)
-- Run a first `perf stat` measurement and interpret the output
-- Establish habits for reproducible experiments
+- Build a reproducible Ubuntu environment for Part I of the book
+- Verify the core measurement tools used in Chapters 1–3
+- Produce your first syscall trace and your first counter-based
+  measurement
+- Establish the evidence habits this book expects: machine
+  fingerprint, prediction, raw artifacts, and explanation
 
 ## Background
 
-All labs in this book run inside an Ubuntu VM on VirtualBox. This
-ensures a consistent, reproducible environment regardless of your host
-OS. We avoid WSL and Docker because they restrict access to kernel
-tracing interfaces that later labs require.
+All required labs in Part I assume either native Ubuntu or an Ubuntu VM.
+That is a deliberate constraint. Later chapters depend on Linux-specific
+interfaces such as `/proc`, cgroup files, `perf`, and kernel tracing. WSL,
+Docker-on-a-laptop, and non-Linux hosts are useful engineering tools, but
+they are poor foundations for an OS measurement course because they hide or
+restrict exactly the interfaces we want to inspect.
 
-The policy is deliberately strict. Concretely:
-
-| Environment | Problem | Result |
+| Environment | Typical problem | Consequence |
 |---|---|---|
-| WSL2 | Limited kernel feature surface | eBPF and perf may fail silently |
-| Docker (as your OS) | BPF capabilities are restricted | No PMU, limited `/proc` |
-| macOS / Windows | Different kernel | No `/proc`, no perf, no cgroups |
+| WSL2 | incomplete kernel feature surface | tracing results may be missing or misleading |
+| Docker as the main lab environment | containerized view of `/proc` and PMU restrictions | later labs become brittle |
+| macOS / Windows host without Linux VM | different kernel | no direct access to Linux counters and cgroups |
 
-The only supported environment is an **Ubuntu VM (VirtualBox or
-equivalent)**, or native Ubuntu. Later labs (Kubernetes, eBPF,
-cgroup experiments) will not work reliably anywhere else.
+> **Warning:** Kernel 5.10 is the minimum supported baseline for this
+> book. Ubuntu 22.04 or 24.04 is the safest choice.
 
-> **Warning:** Kernel 5.10 is the minimum this book assumes; 5.15+
-> is strongly recommended (this is the Ubuntu 22.04 LTS default).
-> Ubuntu 20.04 often runs 5.4 and will miss features used in later
-> labs. Verify with `uname -r` before starting.
-
-## Part A: VM Installation and Tool Setup (Required)
+## Part A: Build and Verify the Environment (Required)
 
 ### A.1 Create the VM
 
-1. Install VirtualBox from <https://www.virtualbox.org/>.
-   On Apple Silicon hosts where VirtualBox is unstable, UTM is an
-   acceptable substitute.
-2. Download Ubuntu 22.04 LTS or 24.04 LTS. Use the desktop ISO for
-   x86_64 hosts; use the ARM server ISO on Apple Silicon.
-3. In VirtualBox, create a new VM:
+Create a VM with these minimum settings:
 
-   | Setting | Recommended value |
-   |---|---|
-   | Name | `mos-book-vm` |
-   | Type | Linux |
-   | Version | Ubuntu (64-bit) |
-   | RAM | 4 GB minimum (8 GB if your host allows) |
-   | CPU | 2 cores |
-   | Disk | 25 GB or more |
+| Setting | Recommendation |
+|---|---|
+| Name | `mos-book-vm` |
+| RAM | 4 GiB minimum; 8 GiB preferred |
+| vCPUs | 2 minimum |
+| Disk | 25 GiB minimum |
+| Guest OS | Ubuntu 22.04 LTS or 24.04 LTS |
 
-4. Attach the Ubuntu ISO and install with the default options.
-   Remember the username and password you set.
-5. After install, remove the ISO and reboot into the installed system.
+Install Ubuntu with the default options. Record the username, kernel
+version, VM memory, and vCPU count in your report.
 
-### A.2 Install the Week-1 Toolchain
+### A.2 Install the Part I Toolchain
 
-Open a terminal inside the VM and run:
+Inside the VM, run:
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential git curl wget
+sudo apt install -y build-essential git curl wget time strace valgrind
 sudo apt install -y linux-tools-common linux-tools-$(uname -r)
-sudo apt install -y strace
 ```
 
-Install the "Stage 2" tools that Chapter 2 will need, so that you do
-not hit surprises next week:
+For Chapter 3, also install Node.js and npm now so that you do not hit a
+separate setup failure later in Part I:
 
 ```bash
-sudo apt install -y python3 python3-pip valgrind
+sudo apt install -y nodejs npm
 ```
 
-### A.3 Verify Everything Works
+### A.3 Run the Environment Check
 
-Run each of these and confirm you get version output or a clean exit:
+This repository includes a local check script at
+`code/ch01-envcheck/env_check.sh`.
+
+```bash
+bash code/ch01-envcheck/env_check.sh | tee lab0_env_check.txt
+```
+
+The script prints `[OK]`, `[WARN]`, or `[ERROR]` lines. Fix every
+`[ERROR]` before continuing. A `[WARN]` is acceptable only if you explain it
+briefly in your report.
+
+Then verify the core tools manually:
 
 ```bash
 gcc --version
 make --version
 git --version
-sudo perf stat ls
 strace --version
+valgrind --version
+node --version
+sudo perf stat true
 ```
 
-Then run the course environment check script. A copy lives in the
-course source tree (`week1/env_check.sh`); a mirror suitable for this
-book is in `code/ch01-envcheck/env_check.sh` once you clone this
-book's companion repo. Save its output:
+### A.4 Machine Fingerprint
+
+Before doing any measurements, create a short reproducibility record.
+Paste the commands and keep the output in your report.
 
 ```bash
-bash env_check.sh | tee lab0_env_check.txt
+uname -a
+lsb_release -a
+lscpu | egrep 'Model name|CPU\(s\)|Thread|Core|Socket'
+free -h
+lsblk -d
 ```
 
-Read the output carefully:
+### A.5 Part A Checklist
 
-- `[OK]` for gcc, make, and perf means you are ready for Chapter 2.
-- `[WARN]` for eBPF, Kubernetes, or security tooling is fine — those
-  tools are installed in later stages (see the course source's
-  `lab0_instructions.md` for the full staged-install list).
-- `[ERROR]` must be fixed before you continue. The most common cause
-  is a kernel older than 5.10; upgrade Ubuntu, or create a fresh VM
-  on a newer LTS.
+- [ ] Ubuntu boots reliably
+- [ ] `code/ch01-envcheck/env_check.sh` runs and produces
+      `lab0_env_check.txt`
+- [ ] `sudo perf stat true` works
+- [ ] `strace`, `valgrind`, and `node` are available
+- [ ] Machine fingerprint captured in the report
 
-### A.4 Part A Checklist
+## Part B: First Trace and First Measurement (Required)
 
-- [ ] Ubuntu VM boots and you can log in
-- [ ] `gcc --version` prints a version
-- [ ] `sudo perf stat ls` runs without "command not found"
-- [ ] `strace --version` prints a version
-- [ ] `env_check.sh` produces `lab0_env_check.txt` with no critical
-      errors
+### B.1 Write a Prediction Before You Run Anything
 
-## Part B: First Measurement with perf stat (Required)
+Create a short section in `lab0_report.md` titled **Prediction** and answer:
 
-### B.1 Write the Program
+1. Which system call do you expect will actually send bytes to the terminal?
+2. Do you expect the program below to show many context switches? Why or why
+   not?
+3. Do you expect zero page faults, a few page faults, or dozens? Give a
+   mechanism-level reason.
+4. Name one alternative explanation you might have to rule out if the first
+   run looks noisy.
+
+This section is graded. Write it before collecting data.
+
+### B.2 Write and Run the Program
 
 Create `hello.c`:
 
@@ -138,71 +149,76 @@ int main(void) {
 Compile and run it:
 
 ```bash
-gcc -o hello hello.c
+gcc -O2 -o hello hello.c
 ./hello
 ```
 
-### B.2 Trace the System Calls
+### B.3 Capture a System Call Trace
 
 ```bash
 strace ./hello 2>&1 | tee strace_hello.txt
 ```
 
-Skim the output. You should see `execve` at the top, a handful of
-`openat`/`read`/`mmap` calls as the dynamic linker loads libc, a
-single `write(1, ...)` for the output line, and `exit_group` at the
-end.
+In your report, answer this question in one or two precise sentences:
 
-**Question:** What syscall does `printf` ultimately invoke to deliver
-bytes to the terminal?
+> What syscall ultimately carries the output of `printf()` to the terminal,
+> and why is that a user-space → kernel boundary crossing?
 
-### B.3 Measure with perf stat (Three Runs)
-
-Run `perf stat` three times in a row and record the numbers. Three
-runs are the minimum needed to notice whether values are stable or
-noisy.
+### B.4 Measure Three Runs with `perf stat`
 
 ```bash
-sudo perf stat ./hello 2>&1 | tee -a perf_stat_hello.txt
-sudo perf stat ./hello 2>&1 | tee -a perf_stat_hello.txt
-sudo perf stat ./hello 2>&1 | tee -a perf_stat_hello.txt
+sudo perf stat ./hello 2>&1 | tee perf_run1.txt
+sudo perf stat ./hello 2>&1 | tee perf_run2.txt
+sudo perf stat ./hello 2>&1 | tee perf_run3.txt
 ```
 
-Fill in a table like this:
+Fill in this table:
 
-| Run | task-clock (ms) | page-faults | cycles | instructions | IPC |
-|---|---|---|---|---|---|
-| 1 |   |   |   |   |   |
-| 2 |   |   |   |   |   |
-| 3 |   |   |   |   |   |
+| Run | task-clock (ms) | context-switches | page-faults | cycles | instructions | IPC |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 |  |  |  |  |  |  |
+| 2 |  |  |  |  |  |  |
+| 3 |  |  |  |  |  |  |
 
-IPC is simply `instructions / cycles`.
+Compute `IPC = instructions / cycles`.
 
-### B.4 Explanation Questions
+### B.5 Interpret the Result
 
-Write answers to these in your report. Two or three sentences each is
-enough; the point is that the answer names a mechanism.
+Answer all four prompts in complete sentences.
 
-1. Are the numbers consistent across runs? If not, which counters
-   varied most, and why might that be?
-2. What is your IPC? Is it closer to 1.0 (memory-bound) or closer to
-   2.0+ (compute-bound)? Is that what you would expect for a program
-   that mostly calls `printf`?
-3. A program this small still produces dozens of page faults on the
-   first run. What are those faults for? (Hint: what does `mmap`
-   actually give you, and when does the kernel allocate real
-   physical pages?)
+1. Which counters were stable across the three runs, and which were noisy?
+2. Did the evidence match your prediction about context switches? Why?
+3. Why can such a tiny program still incur page faults on its first run?
+4. Which alternative explanation did you consider, and what observation lets
+   you rule it out?
 
-### B.5 Part B Checklist
+A good answer names a mechanism. "The number changed a little" is not a
+mechanism. "The first touch of pages for the program image and shared
+libraries produced the faults" is a mechanism.
 
+### B.6 Evidence Table
+
+Add this table to your report.
+
+| Claim | Signal 1 | Signal 2 | Alternative ruled out |
+|---|---|---|---|
+| `printf()` crosses into the kernel through `write()` | `strace` line | program output behavior | direct user-space device access |
+| first-run cost includes page setup | `page-faults` counter | trace shows mapping activity | "the program allocates a large heap" |
+
+You may revise the wording, but keep the structure.
+
+### B.7 Part B Checklist
+
+- [ ] Prediction written before measurement
 - [ ] `hello.c` compiled and ran
-- [ ] `strace ./hello` output captured
-- [ ] `perf stat ./hello` run three times, numbers recorded
-- [ ] Explanation questions answered in complete sentences
+- [ ] `strace_hello.txt` captured
+- [ ] Three `perf stat` runs saved as raw artifacts
+- [ ] Interpretation connects counters to mechanisms
+- [ ] At least one alternative explanation ruled out
 
-## Part C: Context Switch Observation (Optional)
+## Part C: Observe Context Switches Deliberately (Optional)
 
-### C.1 The Program
+### C.1 Build a Small Ping-Pong Program
 
 Create `ctx_switch_test.c`:
 
@@ -214,71 +230,44 @@ Create `ctx_switch_test.c`:
 
 int main(int argc, char *argv[]) {
     int n = (argc > 1) ? atoi(argv[1]) : 1000;
-
     int pipefd[2];
-    if (pipe(pipefd) < 0) { perror("pipe"); return 1; }
+    if (pipe(pipefd) < 0) return 1;
 
     pid_t pid = fork();
-    if (pid < 0) { perror("fork"); return 1; }
+    if (pid < 0) return 1;
 
     if (pid == 0) {
         close(pipefd[1]);
         char buf;
-        for (int i = 0; i < n; i++) {
-            if (read(pipefd[0], &buf, 1) < 0) { perror("read"); _exit(1); }
-        }
+        for (int i = 0; i < n; i++) read(pipefd[0], &buf, 1);
         _exit(0);
-    } else {
-        close(pipefd[0]);
-        char buf = 'x';
-        for (int i = 0; i < n; i++) {
-            if (write(pipefd[1], &buf, 1) < 0) { perror("write"); return 1; }
-        }
-        close(pipefd[1]);
-        wait(NULL);
     }
+
+    close(pipefd[0]);
+    char buf = 'x';
+    for (int i = 0; i < n; i++) write(pipefd[1], &buf, 1);
+    close(pipefd[1]);
+    wait(NULL);
     return 0;
 }
 ```
 
-Compile:
+Compile and measure:
 
 ```bash
 gcc -O2 -o ctx_switch_test ctx_switch_test.c
-```
-
-### C.2 Measure at Three Problem Sizes
-
-```bash
 sudo perf stat -e context-switches,cpu-migrations ./ctx_switch_test 100
 sudo perf stat -e context-switches,cpu-migrations ./ctx_switch_test 1000
 sudo perf stat -e context-switches,cpu-migrations ./ctx_switch_test 10000
 ```
 
-Record:
+Record the scaling and explain why pipe-based handoff produces scheduler
+activity that the `hello` program did not.
 
-| n | context-switches | cpu-migrations | wall time (s) |
-|---|---|---|---|
-| 100 |   |   |   |
-| 1,000 |   |   |   |
-| 10,000 |   |   |   |
+### C.2 Part C Checklist
 
-### C.3 Explain
-
-1. **Scaling:** How does context-switch count grow with `n`? Is it
-   linear, sub-linear, or super-linear? Why?
-2. **Mechanism:** Why does this program force context switches at all?
-   Think about what the child does when the pipe buffer is empty, and
-   what the parent does when it is full.
-3. **Prediction:** If the parent wrote 1,024 bytes per `write()`
-   instead of 1 byte, what would happen to the context-switch count,
-   and why?
-
-### C.4 Part C Checklist
-
-- [ ] Program compiled and ran for three values of `n`
-- [ ] Results tabulated
-- [ ] Scaling and mechanism explained in the report
+- [ ] Results recorded for three values of `n`
+- [ ] Scaling explained in terms of blocking and wakeup behavior
 
 ## Deliverables
 
@@ -286,23 +275,27 @@ Submit a ZIP archive containing:
 
 | File | Required? | Purpose |
 |---|---|---|
-| `lab0_report.md` | Yes | Your written report with results and answers |
-| `lab0_env_check.txt` | Recommended | Raw `env_check.sh` output |
-| `hello.c` | Recommended | The program you measured |
-| `strace_hello.txt` | Optional | Raw strace output |
-| `perf_stat_hello.txt` | Optional | Raw perf stat output (three runs) |
-| `ctx_switch_test.c` | Optional | Source, if you did Part C |
+| `lab0_report.md` | Yes | prediction, environment record, results, interpretation |
+| `lab0_env_check.txt` | Yes | raw environment-check output |
+| `strace_hello.txt` | Yes | raw syscall trace |
+| `perf_run1.txt`, `perf_run2.txt`, `perf_run3.txt` | Yes | raw counter output |
+| `hello.c` | Yes | measured program |
+| `ctx_switch_test.c` | Optional | Part C source |
 
-Your `lab0_report.md` should include:
+Your report must contain:
 
-- A short paragraph on environment setup, noting any issues you hit
-  and how you resolved them
-- The strace answer for Part B
-- Your three-run `perf stat` table, with IPC computed
-- Your written answers to the three Part B questions (mechanism-level,
-  not just restating the numbers)
-- If you did Part C, your scaling table and explanation
+1. machine fingerprint;
+2. the pre-run prediction;
+3. the three-run table with IPC;
+4. a mechanism-level explanation of the trace and counters;
+5. one alternative explanation explicitly ruled out.
 
-Grading follows the course rubric: 30 points for Part A (environment),
-60 points for Part B (measurement + explanation), 10 bonus points for
-Part C.
+## Grading Rubric (100 pts)
+
+| Area | Points | Criterion |
+|---|---:|---|
+| Environment integrity | 25 | VM works; toolchain verified; raw check output included |
+| Prediction quality | 15 | prediction is specific and mechanism-based |
+| Evidence quality | 25 | raw trace and raw counter output are present and used correctly |
+| Explanation quality | 25 | answers connect observations to process creation, faults, and syscall boundaries |
+| Alternative ruled out | 10 | a plausible wrong explanation is named and excluded |

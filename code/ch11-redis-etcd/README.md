@@ -1,26 +1,27 @@
 # code/ch11-redis-etcd
 
-The Chapter 11 lab (*Redis and etcd Benchmarks*) is driven by
-stock tools: `redis-benchmark`, `redis-cli`, `etcdctl`, the `etcd`
-`benchmark` tool, and — optionally — `mc` for MinIO. No custom
-lab source is shipped.
+The Chapter 11 lab (*Redis and etcd Benchmarks*) exercises stock
+tools: `redis-benchmark`, `redis-cli`, `etcdctl`, the etcd
+`benchmark` tool, and — optionally — `mc` for MinIO. Helper
+scripts automate instance setup.
+
+## Layout
+
+```
+code/ch11-redis-etcd/
+├── README.md
+└── scripts/
+    ├── redis-lab-up.sh     # launch three Redis instances (no/everysec/always)
+    └── redis-lab-down.sh   # tear down Redis containers
+```
+
+## Quick start
+
+```bash
+bash scripts/redis-lab-up.sh ~/lab11/redis   # ports 6379/6380/6381
+# ... run lab exercises ...
+bash scripts/redis-lab-down.sh               # cleanup
+```
 
 See `src/part5-storage/ch11-distributed-storage/lab-redis-etcd-bench.md`
-for the full procedure and deliverables.
-
-## Suggested Layout for Your Runs
-
-```
-runs/
-├── redis-aof-no/
-├── redis-aof-everysec/
-├── redis-aof-always/
-├── redis-bgsave/
-└── etcd-compaction/
-```
-
-Keep the `redis.conf` and `etcd` flags you used with each run,
-and store the raw `redis-benchmark` / `etcdctl benchmark` stdout
-in the run directory. This is a reproducibility requirement
-(Chapter 13): every number in the report must be traceable to
-a captured invocation.
+for the full lab procedure.

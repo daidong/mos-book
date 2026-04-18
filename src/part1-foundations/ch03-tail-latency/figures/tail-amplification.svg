@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Tail amplification under fan-out</title>
+  <desc id="desc">A diagram showing a page request faning out to one hundred backend calls, with a small fraction of slow calls causing many page loads to experience the tail.</desc>
+  <defs>
+    <style>
+      .title { font: 700 34px Arial, Helvetica, sans-serif; fill: #1f2937; }
+      .subtitle { font: 400 18px Arial, Helvetica, sans-serif; fill: #4b5563; }
+      .boxTitle { font: 700 22px Arial, Helvetica, sans-serif; fill: #111827; }
+      .body { font: 400 19px Arial, Helvetica, sans-serif; fill: #1f2937; }
+      .small { font: 400 16px Arial, Helvetica, sans-serif; fill: #374151; }
+      .formula { font: 700 34px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .outline { stroke: #374151; stroke-width: 2; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="720" fill="#ffffff" />
+  <text class="title" x="70" y="62">Why a small backend tail becomes a common page-level experience</text>
+  <text class="subtitle" x="70" y="95">A service can look healthy by the mean and still feel slow once a user-facing request fans out across many dependencies.</text>
+
+  <rect x="85" y="150" width="230" height="100" rx="18" ry="18" fill="#d8eef8" class="outline" />
+  <text class="boxTitle" x="136" y="192">One page load</text>
+  <text class="body" x="116" y="225">depends on 100 backend calls</text>
+
+  <path d="M 315 200 C 390 180, 410 150, 470 145" fill="none" stroke="#6b7280" stroke-width="2.5" />
+  <path d="M 315 200 C 390 200, 410 200, 470 200" fill="none" stroke="#6b7280" stroke-width="2.5" />
+  <path d="M 315 200 C 390 220, 410 280, 470 315" fill="none" stroke="#6b7280" stroke-width="2.5" />
+
+  <rect x="480" y="130" width="650" height="250" rx="18" ry="18" fill="#f9fafb" class="outline" />
+  <text class="boxTitle" x="515" y="170">100 backend calls</text>
+  <text class="small" x="515" y="195">Green = fast-path call, red = tail call that waits on a rare slow path</text>
+
+  <g transform="translate(525,225)">
+    <rect x="0" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="52" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="104" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="156" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="208" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="260" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="312" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="364" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="416" y="0" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="468" y="0" width="42" height="42" rx="8" ry="8" fill="#D55E00" stroke="#ffffff" stroke-width="3" />
+
+    <rect x="0" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="52" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="104" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="156" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="208" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="260" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="312" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="364" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="416" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="468" y="52" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+
+    <rect x="0" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="52" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="104" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="156" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="208" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="260" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="312" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="364" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="416" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="468" y="104" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+
+    <rect x="0" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="52" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="104" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="156" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="208" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="260" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="312" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="364" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="416" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+    <rect x="468" y="156" width="42" height="42" rx="8" ry="8" fill="#009E73" stroke="#ffffff" stroke-width="3" />
+  </g>
+
+  <rect x="90" y="445" width="1040" height="190" rx="18" ry="18" fill="#fff7ed" class="outline" />
+  <text class="formula" x="140" y="515">P(at least one call hits the p99) = 1 − 0.99¹⁰⁰ ≈ 0.63</text>
+  <text class="body" x="140" y="565">Even if only 1% of backend calls are slow, a fan-out page has roughly a 63% chance of seeing at least one tail event.</text>
+  <text class="body" x="140" y="600">Operationally, that means the user often experiences the slowest dependency, not the average one.</text>
+</svg>

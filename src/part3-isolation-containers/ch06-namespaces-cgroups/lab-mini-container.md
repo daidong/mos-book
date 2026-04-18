@@ -94,7 +94,20 @@ $MINICTL --help
 **Goal:** Implement `minictl chroot <rootfs> <cmd>`, run `/bin/sh`
 inside it, and demonstrate what `chroot` *does not* isolate.
 
-### A.1 Implement
+### A.1 Predict Before You Build
+
+Before writing any code, answer in your report:
+
+1. After `chroot`, will the process see the host's `/etc/hostname`
+   or the rootfs's? Why?
+2. Will `ps aux` inside the chroot show only container processes
+   or all host processes? Explain in terms of which namespace
+   `chroot` does and does not create.
+3. Name one specific attack that lets a process escape a chroot.
+
+This prediction is graded. Write it before implementing.
+
+### A.2 Implement
 
 File: `src/chroot_cmd.c`. The `fork`/`waitpid` scaffold is already
 in place. Inside the child branch, fill in the four lines:
@@ -112,7 +125,7 @@ if (child == 0) {
 
 Rebuild: `make clean && make`.
 
-### A.2 Test
+### A.3 Test
 
 ```bash
 sudo $MINICTL chroot $ROOTFS /bin/sh -c 'pwd; ls /; hostname'
@@ -134,11 +147,11 @@ sudo $MINICTL chroot $ROOTFS /bin/cat /etc/resolv.conf
 
 ### Part A Checklist
 
+- [ ] Prediction written before implementation
 - [ ] `minictl chroot` runs `/bin/sh` inside the rootfs
 - [ ] Demonstrated that hostname / PID table / network are not
       isolated by `chroot`
-- [ ] Two–three sentences in the report on *what* `chroot` does and
-      does not isolate
+- [ ] Prediction compared to observation — did the result match?
 
 ## Part B: Namespace Isolation (Required)
 
@@ -146,7 +159,18 @@ sudo $MINICTL chroot $ROOTFS /bin/cat /etc/resolv.conf
 PID, mount, and user namespaces via `clone()` and uses `pivot_root`
 for filesystem isolation.
 
-### B.1 Implement `setup_user_namespace()`
+### B.1 Predict Before You Build
+
+Before writing any code:
+
+1. If you create a PID namespace but do *not* mount a new `/proc`,
+   what will `ps aux` inside the container show? Why?
+2. If you skip the `MS_PRIVATE` flag on the root mount, what might
+   `pivot_root` do to the host's mount table?
+3. Will the container process be able to `kill -9` a host process?
+   Which namespace prevents this?
+
+### B.2 Implement `setup_user_namespace()`
 
 File: `src/run_cmd.c`. Two writes:
 
@@ -166,7 +190,7 @@ write(fd, content, strlen(content));
 close(fd);
 ```
 
-### B.2 Implement `setup_mounts()` with `pivot_root`
+### B.3 Implement `setup_mounts()` with `pivot_root`
 
 Replace the placeholder body:
 
@@ -197,7 +221,7 @@ static int setup_mounts(const char *rootfs) {
 
 Rebuild.
 
-### B.3 Test
+### B.4 Test
 
 ```bash
 sudo $MINICTL run --hostname=testcontainer $ROOTFS /bin/hostname
@@ -212,17 +236,28 @@ sudo $MINICTL run $ROOTFS /bin/sh -c 'id'
 
 ### Part B Checklist
 
+- [ ] Prediction written before implementation
 - [ ] Hostname isolated (own UTS namespace)
 - [ ] Process is PID 1 inside container (own PID namespace)
 - [ ] `id` shows `uid=0` inside a rootless run
 - [ ] `/proc` reflects the container's PID namespace
+- [ ] Predictions compared to observations
 
 ## Part C: Cgroup Resource Limits (Required)
 
 **Goal:** Add `--mem-limit=BYTES` and `--cpu-limit=PCT` that apply
 cgroup v2 memory and CPU caps to the container.
 
-### C.1 Implement cgroup writes
+### C.1 Predict Before You Build
+
+1. If you set `memory.max` to 64 MiB but the program allocates
+   only 32 MiB, will you see any signal in `memory.events`?
+2. If you set `cpu.max` to `"10000 100000"` (10 % CPU), will
+   `top` show 10 % or something lower? Why might it differ?
+3. What happens if the cgroup directory is not cleaned up after
+   the container exits?
+
+### C.2 Implement cgroup writes
 
 File: `src/cgroup.c`. Uncomment `cgroup_set_memory`'s write block,
 and fill in the `open`/`write`/`close` bodies of
@@ -234,7 +269,7 @@ File: `src/run_cmd.c`. In `cmd_run()`, uncomment the four calls
 `cgroup_add_process`, plus the matching `cgroup_cleanup(child)` on
 the exit path.
 
-### C.2 Compile test hogs
+### C.3 Compile test hogs
 
 ```bash
 cd code/ch06-minictl/tests
@@ -250,7 +285,7 @@ dynamically linked hog from your Ubuntu host will fail with "No
 such file or directory" inside the Alpine rootfs because the glibc
 loader is absent.
 
-### C.3 Test
+### C.4 Test
 
 ```bash
 # Memory: should be OOM-killed around 64 MiB
@@ -320,11 +355,12 @@ Submit:
 
 | Criterion | Points |
 |---|---|
-| Part A (chroot) works and demonstrates non-isolation | 20 |
-| Part B (namespaces) works; PID 1, hostname, rootless verified | 35 |
-| Part C (cgroups) works; memory and CPU caps enforced | 25 |
+| Predictions (Parts A–C) written before implementation | 15 |
+| Part A (chroot) works and demonstrates non-isolation | 15 |
+| Part B (namespaces) works; PID 1, hostname, rootless verified | 30 |
+| Part C (cgroups) works; memory and CPU caps enforced | 20 |
 | Part D overhead measurement, with interpretation | 10 |
-| Code quality and report clarity | 10 |
+| Prediction vs observation comparison; surprises explained | 10 |
 
 **Total: 100 points.**
 

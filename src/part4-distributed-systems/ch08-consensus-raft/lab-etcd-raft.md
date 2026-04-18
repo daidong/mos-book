@@ -88,6 +88,15 @@ benchmark --help | head -5
 
 ### A.1 Create the network and launch three nodes
 
+A helper script automates this setup:
+
+```bash
+cd code/ch08-etcd-raft
+bash scripts/cluster-up.sh
+```
+
+Or manually:
+
 ```bash
 docker network create etcd-net
 
@@ -193,6 +202,18 @@ leadership. Confirm with the status table.
 ## Part C: Consensus Latency (Required)
 
 **Goal:** Measure the cost of 3-node consensus vs 1-node.
+
+### Prediction (write this before running benchmarks)
+
+Before measuring, predict in your report:
+
+1. By what factor do you expect 3-node write latency to exceed
+   1-node? (Hint: what additional steps does a 3-node write
+   require that a 1-node write does not?)
+2. Will throughput (ops/s) be halved, or worse, or not that bad?
+   Why?
+3. Will linearizable reads be slower than serializable? By how
+   much? What is the extra step?
 
 ### Phase 1 — 1-node etcd
 
@@ -378,6 +399,13 @@ Submit:
 **Total: 100 (+10 bonus).**
 
 ## Cleanup
+
+```bash
+cd code/ch08-etcd-raft
+bash scripts/cluster-down.sh
+```
+
+Or manually:
 
 ```bash
 docker stop etcd1 etcd2 etcd3 etcd-single 2>/dev/null || true

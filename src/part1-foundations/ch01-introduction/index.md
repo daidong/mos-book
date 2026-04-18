@@ -4,168 +4,119 @@
 >
 > After completing this chapter and its lab, you will be able to:
 >
-> - Explain why OS concepts remain relevant in the age of containers,
->   orchestrators, and AI agents
-> - Describe the three core skills this book develops: Understand,
->   Measure, Explain
-> - Set up a reproducible experiment environment (Ubuntu VM with perf,
->   strace, and basic observability tools)
-> - Run your first performance measurement and interpret the output
+> - Explain why OS concepts remain central even when software is packaged as containers, pods, serverless functions, or AI agents
+> - Describe the three core skills this book develops: Understand, Measure, Explain
+> - Map a modern systems symptom to the relevant user-space, kernel, and hardware mechanisms
+> - Run a first trace and a first measurement, then explain what each observation means
 
 ## 1.1 Why Operating Systems Still Matter
 
-Ask ten engineers what an "operating system" is in 2026 and you will
-get ten different answers. Some will point at the Linux kernel. Others
-will name Kubernetes, or their cloud provider, or the container
-runtime their application ships inside. Each answer is partially
-right, and together they describe a real change: the boundary between
-"the OS" and "the platform" has blurred.
+The vocabulary has changed faster than the mechanisms. Engineers now say
+"the pod was throttled," "the inference server p99 regressed," or "the
+agent runtime blocked a tool call." Those sound like platform-level
+problems. Usually they are OS problems with newer names.
 
-The boundary has blurred, but the problems on either side of it have
-not. A Kubernetes pod that gets OOM-killed is solving the same memory
-accounting problem the kernel has solved for decades — with one extra
-layer of policy on top. A p99 latency spike in an LLM inference server
-looks exotic until you realize it is a page fault, a runqueue wait, or
-a lock contention event that an OS textbook from 2005 would have
-recognized. The context has expanded. The mechanisms have not.
+A pod that is OOM-killed is still a memory-accounting failure. A service
+whose p99 jumps from 5 ms to 200 ms is still waiting on a slow path:
+runqueue delay, page reclaim, blocking I/O, or lock contention. An agent
+runtime that decides whether a tool call may touch the filesystem is still
+enforcing a privilege boundary. Kubernetes, container runtimes, service
+meshes, and agent frameworks add policy, automation, and better control
+surfaces. They do not repeal scheduling, virtual memory, protection, or
+I/O.
 
-This book takes that observation seriously. Every chapter introduces a
-classical OS concept — processes, scheduling, isolation, storage,
-consensus — and then applies it to a modern case: a container being
-throttled, an etcd cluster losing quorum, an agent runtime executing a
-tool call that behaves suspiciously like a privileged syscall. The
-concepts are not nostalgia. They are the vocabulary you need to debug
-what you actually run in production.
+That is the premise of this book. We will treat modern systems as layered
+compositions of older mechanisms rather than as entirely new abstractions.
+If a deployment engineer says "Kubernetes throttled my workload," we will
+translate that into the underlying resource-control event. If an incident
+report says "tail latency increased under traffic burst," we will ask what
+queue formed, where it formed, and which resource boundary it crossed.
 
-> **Key insight:** When someone says "Kubernetes is throttling my pod,"
-> they are describing a CFS bandwidth control event. When they say
-> "my inference server p99 got worse," they are usually describing
-> tail latency caused by scheduling, memory pressure, or I/O. The
-> names change; the underlying OS mechanisms do not.
+> **Key insight:** Modern platforms rename OS mechanisms; they do not
+> replace them. If you cannot explain the kernel- and hardware-level cause,
+> you do not yet understand the production symptom.
 
-## 1.2 The Modern OS Landscape
+## 1.2 What Counts as "the OS" Now?
 
-The traditional OS course draws a three-layer picture: applications on
-top, system calls in the middle, kernel at the bottom. That picture is
-still accurate, but it is no longer complete. In a modern deployment,
-there are at least two more layers sitting above the kernel and
-below the application.
+A classical textbook often draws a simple picture: application → system
+call interface → kernel → hardware. That picture is still correct, but it
+is no longer sufficient for real deployments. Most production systems add
+at least two more layers above the kernel: execution runtimes and a control
+plane. Figure 1.1 makes the boundary map explicit.
 
-```text
-┌─────────────────────────────────────────────────┐
-│            Control Plane                        │
-│  (K8s scheduler, controllers, orchestration)    │
-├─────────────────────────────────────────────────┤
-│              Runtimes                           │
-│  (container runtime, eBPF programs, language    │
-│   runtime, agent runtime)                       │
-├─────────────────────────────────────────────────┤
-│              Kernel                             │
-│  (scheduler, memory, fs, net, isolation)        │
-├─────────────────────────────────────────────────┤
-│              Hardware                           │
-└─────────────────────────────────────────────────┘
-```
+![Layered stack showing control plane, user-space runtimes, kernel, and hardware, with example responsibilities at each layer](figures/modern-os-stack.svg)
+*Figure 1.1: A modern systems stack still reduces to a layered resource-management path. The important question is not which layer is “the real OS,” but which layer owns the decision and which layer pays the execution cost.*
 
-Each layer reuses concepts from the layer below. A **container** is a
-process plus a bundle of namespaces and a cgroup. A **pod** is a small
-group of containers scheduled together. A **controller** is an event
-loop that reconciles desired state with observed state — conceptually
-the same feedback pattern the kernel uses to keep the page cache near
-its target size.
+The useful question is not "which layer is the real OS?" The useful
+question is "which layer owns which decision?" The answer is usually more
+specific than students expect.
 
-This reuse matters because it tells you where to look when things
-break. A pod stuck in `CrashLoopBackOff` is ultimately a process
-repeatedly failing to start. A Service with slow DNS is ultimately a
-socket, a syscall, and a runqueue. The control plane can make a
-problem easier to describe, but it rarely invents a new kind of
-failure — it inherits its failure modes from the kernel underneath.
-
-> **Note:** The three-layer picture (kernel / runtime / control plane)
-> is one useful lens, not the only one. Networking people draw
-> different pictures; database people draw different pictures again.
-> Use whichever lens makes the current problem tractable.
-
-## 1.3 Three Core Skills
-
-This book trains three skills, in a deliberate order.
-
-**Understand** — know the mechanism. When we say Linux uses the
-Completely Fair Scheduler, you should be able to state what CFS
-actually does: it picks the runnable task with the smallest virtual
-runtime. When we say containers use cgroup v2 for memory limits, you
-should know that cgroup v2 accounts memory at the page level and
-invokes the OOM killer when `memory.max` is exceeded. Mechanisms first,
-names second.
-
-**Measure** — design controlled experiments. Given a claim ("fsync is
-expensive"), you should be able to write a script that quantifies the
-cost: how many microseconds, over how many samples, with what
-variance, compared to what baseline. A measurement without a baseline
-is not a measurement; it is an anecdote.
-
-**Explain** — connect numbers back to mechanisms. A good explanation
-names the specific OS concept responsible for the observation. "p99
-latency increased from 2 ms to 15 ms when the memory limit dropped to
-512 MB, because page reclaim (kswapd) was woken every 100 ms" is an
-explanation. "The container got slower" is not.
-
-Every symptom you will meet in practice decomposes into these three
-skills. A few worked examples:
-
-| Symptom | OS concept to understand | Tool to measure | What a good explanation looks like |
+| Production term | OS-level analogue | Where to observe it first | Typical failure mode |
 |---|---|---|---|
-| p99 latency spike | Scheduling, page fault | perf, eBPF | "Runqueue wait > 5 ms during GC pause" |
-| Container OOM | Memory accounting, cgroups | cgroup stats | "RSS crossed memory.max at t=42s" |
-| CPU throttling | CFS bandwidth control | /proc, /sys | "cpu.stat shows 80 throttled periods" |
-| Slow Service call | TCP stack, context switch | tcpdump, bpftrace | "200 ms delay from Nagle + delayed ACK" |
+| container | process tree + namespaces + cgroup | `/proc`, `/sys/fs/cgroup` | wrong limit, wrong namespace view |
+| pod CPU throttling | CFS bandwidth control | `cpu.stat`, `schedstat`, `top` | quota exhausted before period ends |
+| service timeout | socket wait + queueing | `ss`, `sar`, app logs | backlog, retransmit, or blocked peer |
+| agent tool call sandbox | `execve()` + credentials + filesystem policy | audit log, syscall trace, policy file | denied capability or path access |
+| autoscaler miss | control loop acting on delayed signals | metrics pipeline + controller logs | stale measurements, slow convergence |
 
-You do not need to be fluent in every tool at the start of this book.
-You do need to commit to the habit: whenever you claim a system
-behaves a certain way, back the claim with a number and a cause.
+Two habits follow from this table.
 
-## 1.4 How This Book Is Organized
+First, always separate policy from mechanism. A Kubernetes resource limit
+is policy. The mechanism is cgroup enforcement in the kernel. A language
+runtime chooses when to allocate memory; the kernel decides when virtual
+pages become physical pages and what happens under pressure.
 
-The book has thirteen chapters grouped into seven parts. Chapter 1
-(this one) and the labs in Part I establish the methodology;
-everything after uses it.
+Second, always ask where the boundary is crossed. If the phenomenon is a
+branch misprediction, the hardware owns it. If it is a page fault, the MMU
+and kernel cooperate on it. If it is a container limit, the kernel enforces
+it even if the user first notices it through `kubectl`.
 
-Each chapter has two halves. The first half is exposition: concepts,
-mechanisms, and enough detail to reason about what is happening. The
-second half is a lab, split into three tiers:
+> **Note:** This book uses the full-stack meaning of "operating system":
+> not just the kernel binary, but the resource-management path from
+> hardware up through the runtime and, when relevant, the control plane.
+> That broader view is useful precisely because it still reduces to a small
+> number of mechanisms.
 
-- **Part A (Basic, required):** the minimum experiment that
-  demonstrates the concept
-- **Part B (Intermediate, required):** a deeper measurement or
-  comparison that forces you to think in evidence chains
-- **Part C (Advanced, optional):** an open-ended extension for
-  students who want more
+## 1.3 Three Core Skills: Understand, Measure, Explain
 
-The labs are not an afterthought. They are where the concepts become
-yours. Reading about a p99 spike is not the same as producing one on
-your own VM and diagnosing it. Where you can, do the labs on the same
-machine you use for everything else — reproducibility is itself a
-skill the labs teach.
+Every chapter in this book trains the same three skills, in the same order.
+The order matters.
 
-A reading guide:
+**Understand** means naming the mechanism precisely. If we say Linux uses
+CFS, you should know that CFS orders runnable tasks by **virtual runtime**
+and picks the leftmost task in that ordering. If we say a memory limit was
+exceeded, you should know which counter moved, which boundary was crossed,
+and which kernel path enforces the limit.
 
-- Read Chapters 1–5 in order. They build on each other.
-- Chapter 6 (containers) depends on Chapters 4–5 (scheduling).
-- Chapter 7 (Kubernetes) depends on Chapter 6.
-- Chapters 8–9 (consensus, cluster scheduling) can be read after
-  Chapter 7, or skipped if you are only interested in the single-node
-  story.
-- Chapters 10–11 (storage) are independent of Chapters 8–9 and can be
-  read after Chapter 5.
-- Chapter 12 (agent runtimes) assumes Chapters 1–7.
-- Chapter 13 (methodology) ties everything together and is best read
-  last.
+**Measure** means producing evidence rather than repeating folklore. A
+claim such as "fsync is expensive" is incomplete until it has a workload,
+a baseline, a repeat count, and a number. A claim such as "the cache is the
+bottleneck" is incomplete until it has a miss rate, a working-set argument,
+or a controlled comparison that rules out alternatives.
 
-## 1.5 A First Look: What Happens When You Run a Program
+**Explain** means connecting the observation back to a cause. "The service
+was slow" is not an explanation. "p99 increased because requests waited on
+major page faults after reclaim under a tight memory limit" is an
+explanation because it names both the signal and the mechanism.
 
-To set the tone for the rest of the book, consider what actually
-happens when you run a single command. Take the simplest program
-imaginable:
+A compact way to think about the book is this:
+
+| Question | Skill | Minimum acceptable answer |
+|---|---|---|
+| What is the mechanism? | Understand | A step-by-step account with the right boundary |
+| How do I observe it? | Measure | A command, a counter, or a trace with reproducible output |
+| Where does it matter today? | Explain in context | A real production setting, not just a toy loop |
+| How does it fail? | Explain causally | A concrete slow path, edge case, or resource limit |
+
+If a chapter is readable but cannot answer those four questions, it is not
+good enough for this book.
+
+## 1.4 What Actually Happens When You Run a Program?
+
+A foundations chapter should not stay rhetorical for long, so let us walk
+through the most basic event in the subject: starting a program.
+
+Consider a shell launching this program:
 
 ```c
 #include <stdio.h>
@@ -177,36 +128,79 @@ int main(void) {
 }
 ```
 
-Compile it and run it under `strace`:
+If you trace the shell and the program together, you can see both process
+creation and program replacement:
 
 ```bash
 $ gcc -o hello hello.c
-$ strace ./hello
+$ strace -f sh -c './hello'
 ```
 
-The output is longer than you might expect. Trimmed to its essentials,
-it looks like this:
+A trimmed trace looks like this:
 
 ```text
-execve("./hello", ["./hello"], ...)     = 0
-brk(NULL)                               = 0x55a7...
-mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7f...
-openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
-read(3, "...", 832)                     = 832
-...
-write(1, "Hello from process 12345\n", 25) = 25
-exit_group(0)                           = ?
+clone(...)                                  = 12345
+[pid 12345] execve("./hello", ["./hello"], ...) = 0
+[pid 12345] brk(NULL)                       = 0x55...
+[pid 12345] mmap(NULL, 8192, PROT_READ|PROT_WRITE, ...) = 0x7f...
+[pid 12345] openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+[pid 12345] read(3, "...", 832)            = 832
+[pid 12345] write(1, "Hello from process 12345\n", 25) = 25
+[pid 12345] exit_group(0)                  = ?
 ```
 
-Every line is a transition across the user–kernel boundary. The
-kernel loads the binary (`execve`), lets the dynamic linker map
-shared libraries into the address space (`mmap`, `openat`, `read`),
-runs your code, and hands the output string to the terminal
-(`write`). Your `printf` turned into a single `write(1, ...)` syscall
-— everything above that was the OS preparing the ground for your
-program to exist at all.
+This small trace already exposes the major boundaries of the subject.
 
-Now measure the same program with `perf stat`:
+1. The shell calls `clone()` or `fork()` to create a child process.
+2. The child calls `execve()` to replace its old address space with the new
+   program image.
+3. The kernel validates the executable, sets up a new virtual address
+   space, stack, arguments, environment, and credentials.
+4. The dynamic linker maps shared libraries with `mmap()` and reads loader
+   metadata with `openat()` and `read()`.
+5. Your program runs in user space until `printf()` eventually reaches the
+   `write()` system call.
+6. The kernel copies bytes into the terminal or pipe buffer and returns to
+   user space.
+
+![Swimlane diagram showing shell launch, fork or clone, execve, loader activity, write system call, and terminal output across user space, kernel, and device layers](figures/program-launch-path.svg)
+*Figure 1.2: Even a trivial `hello` program crosses layers repeatedly. The shell creates a process, `execve()` installs a new image, the loader maps dependencies, and `write()` crosses back into the kernel to reach the terminal.*
+
+Several important OS ideas are already visible here.
+
+- **Process creation** is not the same as program loading. `fork()` or
+  `clone()` creates an execution context; `execve()` replaces its code and
+  data image.
+
+![fork() creates a child process by duplicating the parent, distinguished by the return value](figures/fork.png)
+*Figure 1.3: `fork()` duplicates the parent process. Parent and child share the same code but diverge immediately: the parent receives the child's PID, the child receives zero.*
+
+![execve() replaces the running process image with a new executable loaded from disk](figures/exec.png)
+*Figure 1.4: `execve()` does not create a new process — it replaces the current one. The kernel loads the new program from disk into the same process's address space.*
+
+The separation between `fork()` and `exec()` is a deliberate Unix design
+decision. It means the parent can set up file descriptors, environment, and
+credentials between the two calls. That gap is where shells implement
+redirection, pipelines, and job control. After `execve()`, the old program
+image is gone and the process continues with the new one.
+
+![The parent calls wait() to block until the child exits, then collects its exit status](figures/wait.png)
+*Figure 1.5: The parent calls `wait()` to synchronize with the child. Without it, the child becomes a zombie — finished but not yet reaped — until the parent collects the status.*
+
+![A process is a running program: the kernel loads code and static data from disk into memory, creates a stack, and begins execution](figures/process-2.png)
+*Figure 1.6: A process is a program in execution. The kernel loads the binary from storage into a virtual address space with code, data, heap, and stack segments.*
+
+- **Virtual memory** is established before most of your code runs. `mmap()`
+  creates address-space regions, but pages are often backed lazily and only
+  become physical on first touch.
+- **Privilege boundaries** matter even for trivial I/O. The process cannot
+  write to the terminal directly; it must cross into the kernel, which owns
+  the device interface.
+- **Failures are specific.** `execve()` can fail with `ENOENT` or `EACCES`.
+  `mmap()` can fail under address-space or memory pressure. `write()` can
+  block on a pipe, socket, or terminal buffer.
+
+Now measure the same program:
 
 ```bash
 $ sudo perf stat ./hello
@@ -223,49 +217,71 @@ $ sudo perf stat ./hello
        456,789      instructions
 ```
 
-Six numbers, each one pointing at an OS mechanism:
+Each counter points at a mechanism you will revisit later:
 
-| Counter | Mechanism |
-|---|---|
-| task-clock | CPU time charged to the process by the scheduler |
-| context-switches | Times the scheduler preempted the process |
-| cpu-migrations | Times the process was moved between CPUs |
-| page-faults | Memory pages the kernel had to allocate or load |
-| cycles | CPU clock cycles the hardware executed |
-| instructions | Machine instructions the CPU retired |
+| Counter | What it means | Why it can change |
+|---|---|---|
+| `task-clock` | CPU time charged by the scheduler | waiting less or running more |
+| `context-switches` | scheduler handoffs involving the task | blocking, preemption, contention |
+| `cpu-migrations` | movement between CPUs | load balancing, affinity changes |
+| `page-faults` | missing virtual-to-physical mappings | first touch, reclaim, file-backed pages |
+| `cycles` | hardware time consumed | more work or worse stalls |
+| `instructions` | retired machine instructions | algorithmic work done |
 
-These are the units in which we will speak for the rest of the book.
-When Chapter 5 explains scheduler latency, you will measure it with
-the same `task-clock` counter you just saw. When Chapter 10 explains
-the page cache, you will ask why the `page-faults` count changes
-between cold and warm runs. The tools do not get much more complicated
-than this; the questions do.
+The crucial lesson is that a single command already spans user space,
+kernel policy, and hardware execution. That is why the book insists on
+cross-layer explanations. A production incident rarely lives at just one
+layer.
+
+## 1.5 How This Book Is Organized
+
+Part I establishes the method. Later parts apply it to processes,
+scheduling, containers, Kubernetes, distributed systems, storage, and
+agent runtimes. Every chapter is expected to answer the same four questions:
+what is the mechanism, how do I observe it, where does it matter now, and
+how does it fail?
+
+The labs are the enforcement mechanism for that standard. They are not busy
+work. A good lab requires you to predict a result before running anything,
+collect raw artifacts from your own environment, explain why the result did
+or did not match the prediction, and rule out at least one plausible
+alternative explanation. That matters even more now that students can use AI
+for drafting and debugging. If a lab can be completed convincingly without
+original evidence, it is poorly designed.
+
+Each lab therefore uses a three-tier structure:
+
+- **Part A:** minimum experiment and first evidence
+- **Part B:** deeper comparison, interpretation, and exclusion of alternatives
+- **Part C:** optional extension or open-ended exploration
+
+By the end of the book, the target skill is not "I have heard of this OS
+concept." It is "I can observe this mechanism on a real system, explain the
+signal, and defend my diagnosis."
 
 ## Summary
 
 Key takeaways from this chapter:
 
-- The OS is not just the kernel — it is the full stack of resource
-  management from hardware to application, now including container
-  runtimes and cluster-level control planes.
-- Modern systems (containers, Kubernetes, AI agents) reuse and extend
-  OS concepts like isolation, scheduling, and resource control.
-  Learning the modern context without the classical mechanism gives
-  you names without understanding.
-- This book emphasizes measurement-driven understanding: every claim
-  about system behavior is backed by reproducible evidence, not
-  folklore.
-- The three core skills are **understand**, **measure**, and
-  **explain**. The rest of the book is a sequence of chances to
-  practice all three.
+- The right way to read modern systems is through mechanisms, not labels.
+  Containers, pods, and agent runtimes still rest on scheduling, virtual
+  memory, protection, and I/O.
+- The useful boundary map is user space ↔ kernel ↔ hardware, with runtimes
+  and control planes adding policy above it. Good diagnosis depends on
+  knowing which layer owns which decision.
+- This book trains three skills in order: understand the mechanism, measure
+  it with reproducible evidence, and explain the result causally.
+- Even a trivial `hello` program exercises process creation, `execve()`,
+  virtual memory setup, dynamic linking, syscall crossing, scheduling, and
+  page faults. The foundations are already visible in the first trace.
 
 ## Further Reading
 
 - Arpaci-Dusseau, R. H. & Arpaci-Dusseau, A. C. (2018).
-  *Operating Systems: Three Easy Pieces.* Introduction and Chapter 2.
+  *Operating Systems: Three Easy Pieces.* Introduction and Chapters 4–6.
   Available at <https://pages.cs.wisc.edu/~remzi/OSTEP/>
 - Gregg, B. (2020). *Systems Performance*, 2nd ed. Addison-Wesley.
-  Chapter 1: Introduction.
-- Linux `perf` wiki: <https://perf.wiki.kernel.org/>
-- `man 1 strace`, `man 1 perf-stat`, `man 7 credentials` — the Linux
-  manual is a reference you will return to often.
+  Chapters 1–2.
+- Kerrisk, M. (2010). *The Linux Programming Interface.* Chapters 24–28.
+- Linux manual pages: `man 2 execve`, `man 2 fork`, `man 1 strace`, and
+  `man 1 perf-stat`.

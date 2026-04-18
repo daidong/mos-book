@@ -92,6 +92,9 @@ A process moves through three main states:
 - **Blocked (Sleeping)** — waiting on an event (I/O completion,
   timer, futex, signal).
 
+![Task state timeline showing SLEEPING → RUNNABLE (on runqueue, waiting) → RUNNING (on CPU), with tracepoints sched_wakeup and sched_switch marking the transitions, and scheduling latency defined as t(RUNNING) − t(RUNNABLE)](figures/task_state_timeline.png)
+*Figure 4.1: The three main process states and the transitions between them. Scheduling latency is the time spent in the RUNNABLE state — between the wakeup event and the context switch that actually delivers the CPU.*
+
 The next section is about the transition between **Runnable** and
 **Running**. That transition is where scheduling latency lives.
 
@@ -111,8 +114,22 @@ incoming thread was holding when it last ran:
    its user-space registers.
 
 Linux does this in assembly via a routine conventionally called
-`switch_to` or `swtch`, and the transition looks deceptively small.
-But a context switch is rarely free:
+`switch_to` or `swtch`. In pseudo-code the core looks like:
+
+```text
+context_switch(prev, next):
+    switch_mm(prev->mm, next->mm)       // install next's page tables
+    switch_to(prev, next):
+        save prev's callee-saved registers to prev->thread
+        save prev's stack pointer        to prev->thread.sp
+        load next's stack pointer        from next->thread.sp
+        load next's callee-saved registers from next->thread
+        // execution now continues on next's kernel stack
+    barrier()                            // compiler must not reorder
+```
+
+The transition looks deceptively small, but a context switch is
+rarely free:
 
 - **Direct cost.** Saving and restoring registers plus some kernel
   bookkeeping: hundreds of nanoseconds to a few microseconds on
@@ -243,11 +260,17 @@ the convoy's price — bad average response time.
 you know job length. Starves long jobs; requires an oracle for
 length.
 
+![FIFO vs SJF Gantt charts: under FIFO, one long task delays all short tasks (convoy effect); under SJF, short tasks finish first and the long task runs last](figures/badFIFO.png)
+*Figure 4.2: The convoy effect under FIFO. Short tasks wait behind a long one, inflating average turnaround time. SJF reverses the order and minimizes average wait — but only if job lengths are known in advance.*
+
 **Round Robin (RR).** Give each task a time quantum. Preempt when
 the quantum expires and rotate. Cures starvation; the quantum choice
 is a tradeoff between context-switch overhead (short quantum = many
 switches) and responsiveness (long quantum = bad for I/O-bound tasks
 that only need a short burst of CPU).
+
+![Round Robin with 1 ms vs 100 ms time slices: shorter slices give better responsiveness for short tasks but add more context-switch overhead](figures/badFIFORR.png)
+*Figure 4.3: The quantum tradeoff in Round Robin. A 1 ms slice gives every task quick access but multiplies context switches. A 100 ms slice amortizes switch cost but delays short tasks behind long ones — converging toward FIFO behavior.*
 
 **Multi-Level Feedback Queue (MLFQ).** Multiple priority levels.
 New tasks start high; tasks that use a full quantum drop a level;
@@ -256,12 +279,27 @@ real-world schedulers — Windows, macOS, pre-CFS Linux — are MLFQ
 variants. The Completely Fair Scheduler replaced MLFQ in Linux 2.6.23
 with a different idea (virtual runtime) that Chapter 5 will cover.
 
+![MLFQ with four priority levels: new and I/O-bound tasks enter at the top; tasks that exhaust their time slice drop to lower levels with longer slices](figures/mfq.png)
+*Figure 4.4: A four-level MLFQ. New or I/O-bound tasks start at priority 1 with short slices. CPU-hungry tasks that consume their quantum drop to lower levels with progressively longer slices. The result is automatic classification of interactive vs batch work.*
+
+A scheduler must also handle the common case where CPU-bound and
+I/O-bound tasks share the same machine. I/O-bound tasks use short
+CPU bursts between blocking waits; CPU-bound tasks consume their
+full quantum. A good scheduler lets the I/O-bound task run quickly
+when it wakes, then gives the CPU-bound task the remaining time.
+
+![Workload mixture: one I/O-bound task issues short CPU bursts between I/O waits, while two CPU-bound tasks consume full quanta in the gaps](figures/mixture.png)
+*Figure 4.5: A mixed I/O-bound and CPU-bound workload. The I/O-bound task gets quick access on wakeup; CPU-bound tasks fill the remaining time. MLFQ and CFS both handle this well, but for different reasons.*
+
 ### Multi-CPU: per-CPU runqueues
 
 A single global runqueue does not scale. Every CPU looking at the
 same data structure contends for the lock that protects it. Modern
 kernels maintain a **per-CPU runqueue**, with periodic **load
-balancing** that migrates tasks when queue lengths diverge. This
+balancing** that migrates tasks when queue lengths diverge.
+
+![Per-CPU runqueue: CPU 0 runs task X on-CPU while tasks A, B, C wait in the RUNNABLE queue; RUNNABLE is not the same as running](figures/one_cpu_one_runqueue.png)
+*Figure 4.6: One CPU, one runqueue. Task X is on-CPU; tasks A, B, C are RUNNABLE but waiting. Each additional CPU gets its own runqueue; load balancing migrates tasks between them.* This
 introduces a new axis of tension: migrations improve fairness but
 destroy cache locality. Pinning a latency-sensitive thread to a CPU
 (`taskset`, `sched_setaffinity`) reduces migrations at the cost of
@@ -335,7 +373,20 @@ latency. The math:
 - p99 latency sees those micro-bursts. p50 does not.
 
 This is the classic "CPU utilization is fine, but p99 is terrible"
-incident. The average is fine; the variance is the problem. The
+incident. A real-world example:
+
+> **Incident sketch.** A payment service runs on 4-core nodes at ~55 %
+> average CPU. A nightly log-compaction job starts at 02:00 and
+> consumes 2 full cores. Average CPU rises to ~70 % — still below
+> alarm threshold. But the payment service's p99 jumps from 8 ms to
+> 120 ms. The cause: on the two shared cores, the payment handler
+> now shares a runqueue with compaction threads. Each time the
+> handler wakes from a network read, it waits behind a compaction
+> thread's quantum. The fix: `nice -n 19` the compaction job so the
+> scheduler gives it leftover CPU without blocking the payment
+> handler's wakeups.
+
+The average is fine; the variance is the problem. The
 symptom is latency; the mechanism is runqueue queueing; the fix is
 to reduce the queue (by nicing background work, pinning the
 latency-sensitive task to its own CPU, or isolating it in a cgroup

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="440" viewBox="0 0 1000 440">
+  <style>
+    .t{font: 17px sans-serif; fill:#111}
+    .h{font: 22px sans-serif; font-weight:700; fill:#111}
+    .s{font: 14px sans-serif; fill:#111}
+    .mono{font: 13px monospace; fill:#555}
+  </style>
+
+  <text x="500" y="30" text-anchor="middle" class="h">etcd Write Path: Tracing a Put</text>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#333"/>
+    </marker>
+  </defs>
+
+  <!-- Client -->
+  <rect x="30" y="55" width="100" height="50" rx="8" fill="#f3e8fd" stroke="#8e24aa" stroke-width="2"/>
+  <text x="80" y="85" text-anchor="middle" class="t" font-weight="700">Client</text>
+
+  <!-- Arrow client → leader -->
+  <path d="M 135 80 L 195 80" fill="none" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="165" y="70" text-anchor="middle" class="mono">gRPC Put</text>
+
+  <!-- Leader box -->
+  <rect x="200" y="50" width="380" height="370" rx="12" fill="#e6f4ea" stroke="#34a853" stroke-width="2"/>
+  <text x="390" y="78" text-anchor="middle" class="t" font-weight="700" fill="#1e8e3e">Leader (node1)</text>
+
+  <!-- Step 1: Append to log -->
+  <rect x="225" y="95" width="330" height="40" rx="6" fill="#ceead6" stroke="#34a853"/>
+  <text x="240" y="120" class="s">① Append to in-memory Raft log</text>
+
+  <!-- Step 2: fsync WAL -->
+  <rect x="225" y="145" width="330" height="40" rx="6" fill="#fff3cd" stroke="#f9ab00"/>
+  <text x="240" y="170" class="s">② fsync WAL to disk</text>
+  <text x="540" y="170" text-anchor="end" class="mono">~1–4 ms</text>
+
+  <!-- Step 3: Send AppendEntries -->
+  <rect x="225" y="195" width="330" height="40" rx="6" fill="#ceead6" stroke="#34a853"/>
+  <text x="240" y="220" class="s">③ AppendEntries → followers (parallel)</text>
+
+  <!-- Step 4: Majority ack -->
+  <rect x="225" y="270" width="330" height="40" rx="6" fill="#e8f0fe" stroke="#4285f4"/>
+  <text x="240" y="295" class="s" font-weight="700">④ Majority ack → COMMITTED</text>
+
+  <!-- Step 5: Apply to bbolt -->
+  <rect x="225" y="320" width="330" height="40" rx="6" fill="#ceead6" stroke="#34a853"/>
+  <text x="240" y="345" class="s">⑤ Apply to bbolt (B+ tree)</text>
+  <text x="540" y="345" text-anchor="end" class="mono">~0.5 ms</text>
+
+  <!-- Step 6: Reply -->
+  <rect x="225" y="370" width="330" height="40" rx="6" fill="#f3e8fd" stroke="#8e24aa"/>
+  <text x="240" y="395" class="s">⑥ Reply to client</text>
+
+  <!-- Followers -->
+  <rect x="650" y="140" width="160" height="130" rx="10" fill="#e8f0fe" stroke="#4285f4" stroke-width="2"/>
+  <text x="730" y="168" text-anchor="middle" class="t" font-weight="700" fill="#1a73e8">Followers</text>
+  <text x="730" y="195" text-anchor="middle" class="s">Receive entry</text>
+  <text x="730" y="215" text-anchor="middle" class="s">fsync own WAL</text>
+  <text x="730" y="238" text-anchor="middle" class="s">ACK to leader</text>
+  <text x="730" y="258" text-anchor="middle" class="mono">~0.2 ms RTT</text>
+
+  <!-- Arrow leader → followers -->
+  <path d="M 560 215 L 645 200" fill="none" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Arrow followers → committed -->
+  <path d="M 650 260 L 560 290" fill="none" stroke="#4285f4" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="610" y="280" class="mono" fill="#4285f4">ack</text>
+
+  <!-- Total latency annotation -->
+  <rect x="650" y="330" width="180" height="70" rx="8" fill="#fce8e6" stroke="#ea4335" stroke-width="2"/>
+  <text x="740" y="355" text-anchor="middle" class="s" font-weight="700" fill="#c5221f">Total per write</text>
+  <text x="740" y="380" text-anchor="middle" class="t" fill="#c5221f">2–10 ms</text>
+  <text x="740" y="395" text-anchor="middle" class="mono" fill="#c5221f">dominated by fsync</text>
+</svg>

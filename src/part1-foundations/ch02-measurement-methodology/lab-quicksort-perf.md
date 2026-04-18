@@ -2,341 +2,273 @@
 
 > **Estimated time:** 3–4 hours
 >
-> **Prerequisites:** Chapter 2 concepts; working Ubuntu VM with
-> `gcc`, `perf`, and `valgrind`
+> **Prerequisites:** Chapter 2 concepts; Ubuntu environment from Lab 0
 >
-> **Tools used:** `perf stat`, Valgrind (`cachegrind`, `callgrind`,
-> `massif`), `gcc`, `make`, `/usr/bin/time`
+> **Tools used:** `/usr/bin/time -v`, `perf stat`, Valgrind
+> (`cachegrind`, `callgrind`, optional `massif`), `gcc`, `make`
 
 ## Objectives
 
-- Measure how input pattern (random, sorted, reverse, nearly-sorted)
-  affects quicksort performance
-- Use `perf stat` (or Valgrind as a fallback) to observe IPC, cache
-  miss rates, and branch miss rates
-- Find the input size at which quicksort transitions from CPU-bound
-  to memory-bound
-- Practice the measurement discipline from the chapter: hypothesis,
-  one variable, baseline, rate not count
+- Compare quicksort behavior across multiple input patterns and input sizes
+- Use counters to distinguish "the program did more work" from "the same
+  work ran less efficiently"
+- Predict a transition point before measuring, then test the prediction
+- Produce a report that includes original raw artifacts, one explicit
+  alternative explanation, and a mechanism-level conclusion
 
 ## Background
 
-Quicksort is familiar, and its cost structure is rich enough to
-exercise every mechanism in Chapter 2. Its running time depends on
-pivot selection (which turns worst-case inputs into O(n²) behavior),
-on cache locality (the partition step streams the array), and on
-branch prediction (the comparison inside the partition is the tight
-inner branch). Different input patterns stress different mechanisms,
-so the same code can be fast or slow for reasons that look nothing
-alike in the counter output.
+Quicksort is familiar enough that you can focus on measurement rather than on
+learning a new application. It is also rich enough to expose several failure
+modes at once: algorithmic imbalance, cache effects, branch behavior, and
+recursion overhead. The point of the lab is not to memorize a stock story.
+The point is to argue from evidence.
 
-Source code and starter datasets live in `code/ch02-quicksort/`.
+Starter code lives in `code/ch02-quicksort/`.
 
-> **VM note:** Hardware PMU events (`cycles`, `cache-misses`,
-> `branch-misses`) are frequently unavailable in VirtualBox and
-> VMware guests. If `perf stat` prints `<not supported>` or zero for
-> these events, use the Valgrind fallback described below. Keep the
-> `perf` commands in your write-up either way.
+> **VM note:** In many student VMs, PMU events such as `cache-misses` and
+> `branch-misses` are unavailable. If `perf stat` reports `<not supported>`
+> or zeros for those events, switch to Valgrind and say so explicitly in your
+> report.
 
 ## Prerequisites
-
-Verify your tools:
-
-```bash
-gcc --version
-perf --version       # may need sudo
-valgrind --version
-```
-
-If anything is missing:
-
-```bash
-sudo apt update
-sudo apt install -y build-essential linux-tools-common \
-  linux-tools-$(uname -r) valgrind
-```
-
-## Part A: Quicksort Warm-up (Required)
-
-**Goal:** Get familiar with the profiling tools and collect baseline
-numbers for four input patterns.
-
-### A.1 Build
 
 ```bash
 cd code/ch02-quicksort
 make clean
 make
+make datasets N=100000
 ```
 
-### A.2 Generate Datasets
-
-The starter `Makefile` supports `make datasets N=...`. You can also
-generate them by hand:
+Verify your toolchain:
 
 ```bash
-shuf -i 1-100000 -n 100000 > datasets/random_100000.txt
-seq 1 100000 > datasets/sorted_100000.txt
-seq 100000 -1 1 > datasets/reverse_100000.txt
-seq 1 100000 | awk -v N=100000 'BEGIN{srand()} \
-  {if (rand() < 0.1) print int(rand()*N)+1; else print}' \
-  > datasets/nearly_sorted_100000.txt
+perf --version
+valgrind --version
+/usr/bin/time --version
 ```
 
-### A.3 Time Each Input Three Times
+## Part A: Input Pattern Study (Required)
+
+### A.1 Prediction Before Measurement
+
+Before you run anything, add a **Prediction** section to your report and
+answer:
+
+1. Rank `random`, `sorted`, `reverse`, and `nearly_sorted` from fastest to
+   slowest.
+2. Which mechanism do you think will dominate the slowest case: more total
+   work, worse cache locality, worse branch prediction, or something else?
+3. Name one alternative explanation you will try to rule out.
+
+You may inspect the source code before predicting, but you may not use any
+measurements yet.
+
+### A.2 Build and Run the Four Inputs
+
+```bash
+make clean
+make
+make datasets N=100000
+
+for DS in random sorted reverse nearly_sorted; do
+  echo "=== ${DS} ==="
+  for i in 1 2 3; do
+    /usr/bin/time -f "%e" ./qs datasets/${DS}_100000.txt
+  done
+done
+```
+
+### A.3 Collect Counter Evidence
+
+Preferred path with `perf`:
 
 ```bash
 for DS in random sorted reverse nearly_sorted; do
-    for i in 1 2 3; do
-        /usr/bin/time -f "%e" ./qs datasets/${DS}_100000.txt
-    done
-done
+  echo "=== ${DS} ==="
+  sudo perf stat -e cycles,instructions,cache-references,cache-misses,\
+branches,branch-misses -r 3 ./qs datasets/${DS}_100000.txt
+ done
 ```
 
-### A.4 Collect Hardware Counters (or Valgrind Equivalents)
-
-Preferred, if `perf` supports the events:
+Fallback with Valgrind:
 
 ```bash
-sudo perf stat -e cycles,instructions,cache-references,\
-cache-misses,branches,branch-misses -r 3 \
-  ./qs datasets/random_100000.txt
+mkdir -p outputs
+for DS in random sorted reverse nearly_sorted; do
+  valgrind --tool=cachegrind --cache-sim=yes --branch-sim=yes \
+    --cachegrind-out-file=outputs/${DS}.cg.out \
+    ./qs datasets/${DS}_100000.txt
+ done
 ```
 
-Fallback when counters are unavailable:
+### A.4 Record the Results
+
+| Dataset | Run 1 (s) | Run 2 (s) | Run 3 (s) | Mean (s) | IPC or note | Cache miss rate | Branch miss rate |
+|---|---:|---:|---:|---:|---|---:|---:|
+| random |  |  |  |  |  |  |  |
+| sorted |  |  |  |  |  |  |  |
+| reverse |  |  |  |  |  |  |  |
+| nearly_sorted |  |  |  |  |  |  |  |
+
+If you used Valgrind, write `Valgrind` instead of IPC and explain the tool
+limitation in one sentence.
+
+### A.5 Explain the Slowest Case
+
+Write one short subsection that answers all three questions:
+
+1. Which input was slowest, and by what ratio relative to `random`?
+2. Which measurements support your explanation?
+3. Which alternative explanation did you rule out, and how?
+
+Do **not** say only "cache misses were high" or "it is O(n^2)." Tie the
+claim to the specific evidence you collected.
+
+### A.6 Part A Checklist
+
+- [ ] Prediction written before measurement
+- [ ] Four inputs timed three times each
+- [ ] Counter evidence collected with `perf` or Valgrind
+- [ ] Slowest case explained using at least two signals
+- [ ] One alternative explanation explicitly ruled out
+
+## Part B: Predict the CPU→Memory Transition (Required)
+
+### B.1 Write the Hypothesis First
+
+Before generating the data, record:
+
+1. your L3 cache size;
+2. the rough number of 4-byte integers that fit in that cache;
+3. the input size `N` at which you expect miss rate to rise;
+4. the input size `N` at which you expect IPC to drop or runtime to bend
+   upward;
+5. one reason the observed transition might differ from your estimate.
+
+Helpful commands:
 
 ```bash
-valgrind --tool=cachegrind --cache-sim=yes --branch-sim=yes \
-  --cachegrind-out-file=outputs/cg_random.out \
-  ./qs datasets/random_100000.txt
+lscpu | grep 'L3 cache'
+getconf -a | grep CACHE
+cat /sys/devices/system/cpu/cpu0/cache/index3/size
 ```
 
-Read `D refs`, `D1 misses`, `LLd misses`, `Branches`, `Mispredicts`
-from the cachegrind output. Convert to rates.
-
-### A.5 Fill the Table
-
-| Dataset | Run 1 (s) | Run 2 (s) | Run 3 (s) | Mean | Cache miss rate | Branch miss rate |
-|---|---|---|---|---|---|---|
-| random_100000 |   |   |   |   |   |   |
-| sorted_100000 |   |   |   |   |   |   |
-| reverse_100000 |   |   |   |   |   |   |
-| nearly_sorted_100000 |   |   |   |   |   |   |
-
-### A.6 Two- or Three-sentence Explanation
-
-Answer:
-
-1. Which input is slowest? By roughly how much?
-2. Does the branch miss rate explain the slowdown?
-3. Does the cache miss rate explain it?
-
-The expected story: the sorted input triggers worst-case pivot
-behavior in textbook quicksort, so the algorithm itself degrades
-toward O(n²). The cycle and instruction counts climb steeply; the
-cache miss rate often stays comparable to random. That is a case
-where the mechanism is algorithmic, not hardware — and you should be
-able to say so in one sentence.
-
-### A.7 Part A Checklist
-
-- [ ] Built the quicksort program
-- [ ] Generated all four dataset patterns
-- [ ] Timed each input three times
-- [ ] Collected `perf stat` or cachegrind data
-- [ ] Wrote a short explanation of the slowest case
-
-## Part B: Finding the CPU→Memory Transition (Required)
-
-**Goal:** Identify the input size at which quicksort moves from
-CPU-bound to memory-bound, and explain the mechanism.
-
-### B.1 Write Your Hypothesis First
-
-Before running anything, record:
-
-1. Your L3 cache size:
-
-   ```bash
-   lscpu | grep "L3 cache"
-   cat /sys/devices/system/cpu/cpu0/cache/index3/size  # alternate
-   ```
-
-2. At 4 bytes per integer, how many integers fit in L3?
-3. At what `N` do you expect cache miss rate to climb?
-4. At what `N` do you expect IPC to drop?
-
-Write this down *before* seeing the data. Part of the grade is that
-you committed to a hypothesis.
-
-### B.2 Experiment
+### B.2 Run the Size Sweep
 
 ```bash
 for N in 1000 5000 10000 20000 50000 100000 200000 500000 1000000; do
-    shuf -i 1-$N -n $N > datasets/random_$N.txt
-done
-
-for N in 1000 5000 10000 20000 50000 100000 200000 500000 1000000; do
-    echo "=== N = $N ==="
-    sudo perf stat -e cycles,instructions,cache-references,\
-cache-misses -r 3 ./qs datasets/random_$N.txt
-done
+  make datasets N=$N
+  echo "=== N = $N ==="
+  /usr/bin/time -f "%e" ./qs datasets/random_${N}.txt
+  sudo perf stat -e cycles,instructions,cache-references,cache-misses -r 3 \
+    ./qs datasets/random_${N}.txt
+ done
 ```
 
-VM fallback (cachegrind):
+Fallback with Valgrind:
 
 ```bash
+mkdir -p outputs
 for N in 1000 5000 10000 20000 50000 100000 200000 500000 1000000; do
-    echo "=== N = $N ==="
-    valgrind --tool=cachegrind --cache-sim=yes --branch-sim=no \
-      --cachegrind-out-file=outputs/cg_${N}.out \
-      ./qs datasets/random_$N.txt 2>&1 | \
-      egrep "D\s+refs|D1\s+misses|LLd\s+misses"
-    /usr/bin/time -f "%e" ./qs datasets/random_$N.txt
-done
+  echo "=== N = $N ==="
+  /usr/bin/time -f "%e" ./qs datasets/random_${N}.txt
+  valgrind --tool=cachegrind --cache-sim=yes --branch-sim=no \
+    --cachegrind-out-file=outputs/random_${N}.cg.out \
+    ./qs datasets/random_${N}.txt
+ done
 ```
 
-### B.3 Collect the Data
+### B.3 Record the Sweep
 
 | N | Wall time (s) | Cycles | Instructions | IPC | Cache refs | Cache misses | Miss rate |
-|---|---|---|---|---|---|---|---|
-| 1,000 |   |   |   |   |   |   |   |
-| 5,000 |   |   |   |   |   |   |   |
-| 10,000 |   |   |   |   |   |   |   |
-| 20,000 |   |   |   |   |   |   |   |
-| 50,000 |   |   |   |   |   |   |   |
-| 100,000 |   |   |   |   |   |   |   |
-| 200,000 |   |   |   |   |   |   |   |
-| 500,000 |   |   |   |   |   |   |   |
-| 1,000,000 |   |   |   |   |   |   |   |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1,000 |  |  |  |  |  |  |  |
+| 5,000 |  |  |  |  |  |  |  |
+| 10,000 |  |  |  |  |  |  |  |
+| 20,000 |  |  |  |  |  |  |  |
+| 50,000 |  |  |  |  |  |  |  |
+| 100,000 |  |  |  |  |  |  |  |
+| 200,000 |  |  |  |  |  |  |  |
+| 500,000 |  |  |  |  |  |  |  |
+| 1,000,000 |  |  |  |  |  |  |  |
 
-### B.4 Plot
+### B.4 Plot and Interpret
 
-Plot two curves on a log-x axis: wall time vs `N`, and cache miss
-rate vs `N`. Mark the `N` at which miss rate climbs sharply. Mark the
-`N` at which IPC drops below 1.
+Create at least one plot with `N` on a log-x axis. At minimum, plot wall
+runtime and either cache-miss rate or the closest Valgrind-derived miss
+metric.
 
-### B.5 Write-up (1–2 pages)
+Your write-up must answer:
 
-Your report should answer:
+1. Did the observed transition match your prediction?
+2. If not, what is the best mechanism-level explanation?
+3. Which alternative explanation did you consider and reject?
 
-1. **Hypothesis.** What did you predict, and why? Include your L3
-   size and the math.
-2. **Design.** Which `N` values did you pick, and why? How many
-   repeats, and how did you handle variance?
-3. **Results.** The table above, plus at least one plot. Include the
-   environment (CPU, kernel, VM config).
-4. **Interpretation.** Was your hypothesis correct? If the transition
-   happened at a different `N` than predicted, why? (L2 vs L3? Extra
-   overhead from the recursion stack? Partitioning overhead?)
-5. **Surprise.** One sentence on anything you did not expect.
+### B.5 Part B Checklist
 
-### B.6 Part B Checklist
+- [ ] Cache-size-based hypothesis recorded before the sweep
+- [ ] Size sweep collected across several orders of magnitude
+- [ ] At least one plot included
+- [ ] Transition interpreted with mechanism and evidence
+- [ ] Alternative explanation discussed explicitly
 
-- [ ] Wrote hypothesis before running experiments
-- [ ] Generated datasets across a wide range of `N`
-- [ ] Collected metrics with three repeats per `N`
-- [ ] Computed IPC and miss rate
-- [ ] Plotted the results
-- [ ] Identified the transition and explained the mechanism
+## Part C: Extend to a New Workload (Optional)
 
-## Part C: Your Own Workload (Optional)
+Choose **one** extension.
 
-Choose one:
+### Option 1: Standard Utility
 
-### Option 1: Profile a Standard Tool
+Profile `sort`, `grep`, `wc`, or `gzip` on a large file. Decide whether the
+workload is primarily compute-, memory-, or I/O-limited, and defend the
+classification with counters.
 
-Pick `sort`, `grep`, `wc`, or `gzip`. Profile it on a large file:
+### Option 2: Cache-Friendly vs Cache-Unfriendly Access
 
-```bash
-yes "the quick brown fox jumps over the lazy dog" | head -1000000 \
-  > testfile.txt
-sudo perf stat sort testfile.txt > /dev/null
-sudo perf stat grep "fox" testfile.txt > /dev/null
-sudo perf stat wc testfile.txt
-```
+Write a small program that traverses an array sequentially and then with a
+large stride. Measure the difference and explain it with locality.
 
-Answer: is it CPU-bound or memory/IO-bound? What is the IPC? Which
-counter best explains its cost?
+### Option 3: Your Own Code
 
-### Option 2: Cache-Friendly vs Cache-Unfriendly
-
-Write the row-major and column-major sums from Section 2.2, measure
-both at several matrix sizes, and find the `N` at which the gap
-becomes significant. Explain the mechanism (cache line size vs row
-stride).
-
-### Option 3: Profile Your Own Code
-
-Pick one function in a project you care about. Isolate it into a
-benchmark, run `perf stat` and `perf record`, identify the
-bottleneck, and connect it to a mechanism from Chapter 2.
-
-### Part C Write-up (1 page)
-
-State what you profiled, which metrics you collected, what you found,
-and which Chapter 2 mechanism explains the result.
+Pick a program you wrote for another course or project. State one hypothesis
+about its bottleneck, test it, and explain the result.
 
 ## Submission
 
-Submit a single PDF or Markdown report containing:
+Submit a single PDF or Markdown report plus the raw artifacts you used to
+support it.
 
-1. **Part A Results** (~1 page) — data table and short explanation
-2. **Part B Analysis** (1–2 pages) — hypothesis, design, results,
-   interpretation, surprise
-3. **Part C Extension** (1 page, if completed) — workload, metrics,
-   findings, mechanism
+Required files:
 
-Use `templates/lab-report-template.md` as a starting point.
+| File | Required? | Purpose |
+|---|---|---|
+| `report.md` or `report.pdf` | Yes | prediction, results, plots, interpretation |
+| raw `perf` or Valgrind outputs | Yes | evidence behind every claim |
+| plot script or notebook | Yes | reproducibility |
+| `code/ch02-quicksort` changes, if any | Optional | only if you modified the starter |
 
-## Grading Rubric
+Your report must include:
 
-| Criterion | Points |
-|---|---|
-| **Part A (30)** | |
-| Data collected correctly, multiple runs | 15 |
-| Correct explanation of worst-case input | 15 |
-| **Part B (60)** | |
-| Clear hypothesis stated before experiments | 10 |
-| Sound experiment design | 15 |
-| Data collected and presented clearly | 15 |
-| Interpretation connects numbers to a mechanism | 20 |
-| **Part C (10 bonus)** | |
-| Meaningful analysis of a new workload | 10 |
+1. the Part A prediction;
+2. the Part B cache-size hypothesis;
+3. at least two tables and one plot;
+4. one explicit alternative explanation ruled out in Part A and one in Part B;
+5. enough environment detail for another student to reproduce the run.
 
-**Total: 90 points (+ 10 bonus).**
+## Grading Rubric (100 pts)
+
+| Area | Points | Criterion |
+|---|---:|---|
+| Prediction quality | 15 | hypotheses are specific and stated before measurement |
+| Experimental design | 20 | baselines, repeats, and tool choices are appropriate |
+| Evidence quality | 25 | raw outputs, tables, and plots support the claims |
+| Mechanism depth | 30 | explanation distinguishes work increase from efficiency loss |
+| Alternative ruled out | 10 | report explicitly rejects at least one plausible competing story |
 
 ## Common Pitfalls
 
-1. **Single run, single number.** Variance is large; three runs
-   minimum.
-2. **Miss *count* vs miss *rate*.** A bigger dataset has more
-   accesses and therefore more misses. Report the rate.
-3. **Cold cache on first run.** Throw out the first run or warm up
-   with a dry run.
-4. **Counters read as `<not supported>`.** Do not try to interpret
-   zeros. Switch to cachegrind and note the change in your write-up.
-5. **No mechanism in the explanation.** "Cache misses slowed it down"
-   is not a mechanism — *why* did misses appear (working set > cache?
-   bad stride? pointer chasing?) is the mechanism.
-
-## Troubleshooting
-
-- **`perf` refuses to run.** Use `sudo`, or set
-  `sudo sysctl kernel.perf_event_paranoid=-1` for this session only
-  on your own VM.
-- **Valgrind writes "Permission denied".** An earlier `sudo` run left
-  root-owned output files. Use `--cachegrind-out-file=outputs/cg_%p.out`
-  to send output somewhere you own.
-- **Noisy results.** Close other applications; pin the governor:
-  `sudo cpupower frequency-set --governor performance`.
-
-## Reference: perf Commands
-
-```bash
-sudo perf stat ./program
-sudo perf stat -e cycles,instructions,cache-misses,branch-misses ./program
-sudo perf stat -r 5 ./program
-sudo perf record -g ./program && sudo perf report
-perf list      # all available events
-```
+- Treating miss **counts** as if they were miss **rates**
+- Reporting one run and calling it representative
+- Ignoring tool limitations in a VM
+- Claiming a mechanism without citing a signal that actually measures it
+- Writing the conclusion first and using the data only as decoration

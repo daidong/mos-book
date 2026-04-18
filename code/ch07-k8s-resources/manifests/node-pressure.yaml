@@ -1,0 +1,41 @@
+# Lab 5 Part D: Node Memory Pressure Generator
+#
+# Deploys a Pod that steadily consumes memory to trigger kubelet
+# eviction.  Use alongside the three QoS Pods from Part A to
+# observe eviction ordering (BestEffort → Burstable → Guaranteed).
+#
+# WARNING: this will destabilize a small kind cluster.  Be prepared
+# to `kind delete cluster` and recreate.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-pressure
+  labels:
+    experiment: eviction
+spec:
+  containers:
+  - name: hog
+    image: ubuntu:22.04
+    command:
+    - /bin/bash
+    - -c
+    - |
+      echo "Allocating memory in 32 MiB steps until eviction..."
+      i=0
+      while true; do
+        # stress-ng may not be installed; fall back to dd into tmpfs
+        dd if=/dev/zero of=/dev/shm/block_${i} bs=1M count=32 2>/dev/null
+        i=$((i + 1))
+        echo "Allocated $((i * 32)) MiB"
+        sleep 2
+      done
+    resources:
+      # BestEffort — no requests or limits, so this Pod is evicted
+      # last only if the three QoS-demo Pods are already gone.
+      # To make it evict *after* the demo Pods, give it Burstable:
+      requests:
+        cpu: "10m"
+        memory: "32Mi"
+      # No limits — it will keep growing until kubelet intervenes.
+  restartPolicy: Never

@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520">
+  <defs>
+    <style>
+      .title { font: 700 28px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 16px Arial, Helvetica, sans-serif; fill: #475569; }
+      .cardtitle { font: 700 24px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .label { font: 700 16px Arial, Helvetica, sans-serif; fill: #334155; }
+      .body { font: 500 15px Arial, Helvetica, sans-serif; fill: #334155; }
+      .small { font: 600 14px Arial, Helvetica, sans-serif; fill: #475569; }
+      .pill { font: 700 14px Arial, Helvetica, sans-serif; fill: white; }
+    </style>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#94a3b8" flood-opacity="0.25"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="520" fill="#f8fafc"/>
+  <text x="40" y="42" class="title">Why WAL is easier to recover than update-in-place</text>
+  <text x="40" y="70" class="subtitle">Both paths change the same logical value, but only one leaves a clean durable record of intent.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="100" rx="28" ry="28" width="520" height="360" fill="#fff7ed" stroke="#fdba74" stroke-width="3"/>
+    <text x="70" y="140" class="cardtitle">Unsafe path: overwrite main data directly</text>
+
+    <rect x="90" y="185" rx="18" ry="18" width="200" height="140" fill="#ffffff" stroke="#f97316" stroke-width="3"/>
+    <text x="120" y="215" class="label">Data page before crash</text>
+    <rect x="120" y="240" width="140" height="30" fill="#cbd5e1"/>
+    <rect x="120" y="270" width="140" height="30" fill="#93c5fd"/>
+    <text x="134" y="260" class="small">old value: x = 41</text>
+    <text x="134" y="290" class="small">index points here</text>
+
+    <line x1="300" y1="255" x2="350" y2="255" stroke="#64748b" stroke-width="5" marker-end="url(#arrow)"/>
+    <text x="306" y="238" class="small">overwrite</text>
+
+    <rect x="360" y="185" rx="18" ry="18" width="150" height="140" fill="#ffffff" stroke="#ef4444" stroke-width="3"/>
+    <text x="383" y="215" class="label">Crash here</text>
+    <rect x="390" y="240" width="90" height="30" fill="#fca5a5"/>
+    <rect x="390" y="270" width="45" height="30" fill="#fde68a"/>
+    <rect x="435" y="270" width="45" height="30" fill="#93c5fd"/>
+    <text x="399" y="260" class="small">new bytes</text>
+    <text x="398" y="290" class="small">half old / half new</text>
+
+    <polygon points="438,150 458,202 430,202 452,255 414,198 442,198" fill="#ef4444"/>
+
+    <rect x="78" y="360" rx="18" ry="18" width="444" height="68" fill="#ef4444"/>
+    <text x="108" y="388" class="pill">Recovery problem: the data page is ambiguous, and there is no durable record saying what the system intended.</text>
+    <text x="108" y="410" class="pill">You are forced to guess from damaged state.</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="640" y="100" rx="28" ry="28" width="520" height="360" fill="#ecfdf5" stroke="#86efac" stroke-width="3"/>
+    <text x="670" y="140" class="cardtitle">Safer path: WAL first, main data later</text>
+
+    <rect x="680" y="185" rx="18" ry="18" width="150" height="140" fill="#ffffff" stroke="#22c55e" stroke-width="3"/>
+    <text x="710" y="215" class="label">1. Append intent</text>
+    <rect x="708" y="243" width="94" height="26" fill="#bbf7d0" rx="8"/>
+    <rect x="708" y="277" width="94" height="26" fill="#86efac" rx="8"/>
+    <text x="723" y="261" class="small">SET x=42</text>
+    <text x="714" y="295" class="small">log tail entry</text>
+
+    <line x1="835" y1="255" x2="885" y2="255" stroke="#64748b" stroke-width="5" marker-end="url(#arrow)"/>
+    <text x="844" y="238" class="small">fsync</text>
+
+    <rect x="895" y="185" rx="18" ry="18" width="110" height="140" fill="#ffffff" stroke="#16a34a" stroke-width="3"/>
+    <text x="920" y="215" class="label">2. Safe</text>
+    <circle cx="950" cy="265" r="34" fill="#22c55e"/>
+    <text x="930" y="271" class="pill">OK</text>
+    <text x="915" y="315" class="small">durable intent</text>
+
+    <line x1="1008" y1="255" x2="1055" y2="255" stroke="#64748b" stroke-width="5" marker-end="url(#arrow)"/>
+    <text x="1017" y="238" class="small">replay</text>
+
+    <rect x="1060" y="185" rx="18" ry="18" width="70" height="140" fill="#ffffff" stroke="#3b82f6" stroke-width="3"/>
+    <text x="1069" y="215" class="label">3.</text>
+    <rect x="1075" y="242" width="40" height="30" fill="#93c5fd"/>
+    <rect x="1075" y="272" width="40" height="30" fill="#60a5fa"/>
+    <text x="1069" y="315" class="small">apply</text>
+
+    <rect x="678" y="360" rx="18" ry="18" width="444" height="68" fill="#16a34a"/>
+    <text x="705" y="388" class="pill">Recovery rule: trust the durable log, discard incomplete tail bytes, then replay committed records.</text>
+    <text x="705" y="410" class="pill">You do not need to guess what “should have happened.”</text>
+  </g>
+</svg>

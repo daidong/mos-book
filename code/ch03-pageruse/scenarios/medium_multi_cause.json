@@ -102,6 +102,10 @@
 
     "grep -E 'pgmajfault|pswp' /proc/vmstat": "pgmajfault 22012\npswpin 2210\npswpout 5441\n",
 
-    "dmesg": "[  +0.000000] cpu: batch-etl pinned to cpu2 at 03:07\n[  +0.000000] api-gateway: p99 alert fired\n"
+    "dmesg": "[  +0.000000] cpu: batch-etl pinned to cpu2 at 03:07\n[  +0.000000] api-gateway: p99 alert fired\n",
+
+    "ps -eo pid,user,%cpu,%mem,stat,comm": "  PID USER     %CPU %MEM STAT COMMAND\n    1 root      0.0  0.1 Ss   systemd\n 3201 root    165.0 11.6 R    batch-etl\n 1877 app      85.0  9.5 Sl   api-gateway\n  890 root      0.5  0.2 Ssl  node-exporter\n  345 root      0.1  0.0 S    kswapd0\n",
+
+    "ss -s": "Total: 310 (kernel 0)\nTCP:   186 (estab 72, closed 62, orphaned 0, timewait 52)\nTransport Total     IP        IPv6\n*         0         -         -\nRAW       0         0         0\nUDP       8         6         2\nTCP       124       91        33\nINET      132       97        35\nFRAG      0         0         0\n"
   }
 }

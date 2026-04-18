@@ -67,6 +67,32 @@ You should see a burst of switch and wakeup events scroll past. If
 you do not, either BTF is unavailable or tracepoints are somehow
 disabled; re-run the verification block above.
 
+### Fallback: bpftrace-only path
+
+If the libbpf toolchain does not build (missing headers, old clang,
+BTF issues), you can complete Parts A–C using **bpftrace one-liners
+only**. The lab handout marks each section with the bpftrace
+alternative. You must note in your report that you used the
+fallback, and your mechanism explanations are graded identically.
+
+The core measurement is:
+
+```bpftrace
+sudo bpftrace -e '
+  tracepoint:sched:sched_wakeup { @ts[args->pid] = nsecs; }
+  tracepoint:sched:sched_switch / @ts[args->next_pid] / {
+      $d_us = (nsecs - @ts[args->next_pid]) / 1000;
+      @lat_us = hist($d_us);
+      delete(@ts[args->next_pid]);
+  }
+  interval:s:20 { exit(); }
+'
+```
+
+This gives you a histogram directly. For CSV output, pipe through
+`bpftrace -f json` and post-process with the scripts in
+`code/ch05-schedlab/scripts/`.
+
 ## Part A: Build and Baseline (Required)
 
 **Goal:** Establish the scheduling-latency distribution on an idle
@@ -120,6 +146,10 @@ sudo ./schedlab --mode latency --duration 20 \
 python3 scripts/percentiles.py latency_loaded.csv
 ```
 
+**bpftrace fallback:** run the histogram one-liner from the
+Prerequisites section while `stress-ng` is running. Compare the
+histogram shape to your idle run.
+
 Compare:
 
 | Percentile | Idle (µs) | Loaded (µs) | Ratio |
@@ -172,6 +202,22 @@ sudo ./schedlab --mode fairness --duration 20 \
   --output fairness.csv
 python3 scripts/fairness.py fairness.csv
 ```
+
+**bpftrace fallback:** use the per-comm runtime tracker:
+
+```bpftrace
+sudo bpftrace -e '
+  tracepoint:sched:sched_switch {
+      @runtime[args->prev_comm] = sum(
+          (nsecs - @on[args->prev_pid]) / 1000000);
+      @on[args->next_pid] = nsecs;
+  }
+  interval:s:20 { exit(); }
+'
+```
+
+Compare the `@runtime` values for `stress-ng` processes with
+different nice values.
 
 `fairness.csv` contains per-task `run_time_ns` and `wait_time_ns`.
 Compute the CPU share for each task:

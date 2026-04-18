@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540">
+  <defs>
+    <style>
+      .title { font: 700 28px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 16px Arial, Helvetica, sans-serif; fill: #475569; }
+      .cardtitle { font: 700 22px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .label { font: 700 15px Arial, Helvetica, sans-serif; fill: #334155; }
+      .body { font: 500 15px Arial, Helvetica, sans-serif; fill: #334155; }
+      .pill { font: 700 13px Arial, Helvetica, sans-serif; fill: white; }
+    </style>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#94a3b8" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="540" fill="#f8fafc"/>
+  <text x="40" y="42" class="title">The same Week 10A questions lead to very different designs</text>
+  <text x="40" y="70" class="subtitle">Different systems do not just differ in speed. They choose different places to pay for safety, scale, and operational simplicity.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="110" rx="28" ry="28" width="260" height="360" fill="#eff6ff" stroke="#60a5fa" stroke-width="3"/>
+    <text x="125" y="148" class="cardtitle">Redis</text>
+    <rect x="90" y="170" rx="14" ry="14" width="160" height="30" fill="#3b82f6"/>
+    <text x="119" y="190" class="pill">truth lives in RAM first</text>
+    <text x="65" y="235" class="label">Honest OK</text>
+    <text x="65" y="260" class="body">Depends on persistence mode:</text>
+    <text x="65" y="283" class="body">immediate, periodic flush, or</text>
+    <text x="65" y="306" class="body">per-write fsync.</text>
+    <text x="65" y="348" class="label">Background work</text>
+    <text x="65" y="373" class="body">snapshot, AOF rewrite,</text>
+    <text x="65" y="396" class="body">replica catch-up</text>
+    <text x="65" y="438" class="label">Best fit</text>
+    <text x="65" y="463" class="body">cache, session, queue,</text>
+    <text x="65" y="486" class="body">high-rate ephemeral state</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="320" y="110" rx="28" ry="28" width="260" height="360" fill="#ecfdf5" stroke="#34d399" stroke-width="3"/>
+    <text x="418" y="148" class="cardtitle">etcd</text>
+    <rect x="365" y="170" rx="14" ry="14" width="170" height="30" fill="#10b981"/>
+    <text x="390" y="190" class="pill">truth needs a quorum</text>
+    <text x="345" y="235" class="label">Honest OK</text>
+    <text x="345" y="260" class="body">After replicated log commit</text>
+    <text x="345" y="283" class="body">and apply to current state.</text>
+    <text x="345" y="348" class="label">Background work</text>
+    <text x="345" y="373" class="body">snapshot, compaction,</text>
+    <text x="345" y="396" class="body">defragmentation</text>
+    <text x="345" y="438" class="label">Best fit</text>
+    <text x="345" y="463" class="body">cluster metadata, leases,</text>
+    <text x="345" y="486" class="body">control-plane state</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="600" y="110" rx="28" ry="28" width="260" height="360" fill="#fff7ed" stroke="#fb923c" stroke-width="3"/>
+    <text x="694" y="148" class="cardtitle">LSM KV</text>
+    <rect x="628" y="170" rx="14" ry="14" width="204" height="30" fill="#f97316"/>
+    <text x="653" y="190" class="pill">truth starts in log + RAM</text>
+    <text x="625" y="235" class="label">Honest OK</text>
+    <text x="625" y="260" class="body">Usually after durable log step;</text>
+    <text x="625" y="283" class="body">details depend on the engine.</text>
+    <text x="625" y="348" class="label">Background work</text>
+    <text x="625" y="373" class="body">memtable flush, merge,</text>
+    <text x="625" y="396" class="body">compaction</text>
+    <text x="625" y="438" class="label">Best fit</text>
+    <text x="625" y="463" class="body">large write-heavy</text>
+    <text x="625" y="486" class="body">key-value workloads</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="880" y="110" rx="28" ry="28" width="280" height="360" fill="#f8fafc" stroke="#94a3b8" stroke-width="3"/>
+    <text x="950" y="148" class="cardtitle">Object store</text>
+    <rect x="935" y="170" rx="14" ry="14" width="170" height="30" fill="#64748b"/>
+    <text x="963" y="190" class="pill">whole-object semantics</text>
+    <text x="905" y="235" class="label">Honest OK</text>
+    <text x="905" y="260" class="body">Object accepted under service</text>
+    <text x="905" y="283" class="body">durability semantics.</text>
+    <text x="905" y="348" class="label">Background work</text>
+    <text x="905" y="373" class="body">rebalance, erasure coding,</text>
+    <text x="905" y="396" class="body">lifecycle management</text>
+    <text x="905" y="438" class="label">Best fit</text>
+    <text x="905" y="463" class="body">backups, logs, media,</text>
+    <text x="905" y="486" class="body">data-lake style blobs</text>
+  </g>
+</svg>

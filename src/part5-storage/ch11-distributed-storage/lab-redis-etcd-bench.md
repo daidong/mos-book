@@ -49,23 +49,25 @@ three `appendfsync` policies.
 
 ### A.1 Launch Redis in each mode
 
+A helper script sets up all three instances with clean port assignments:
+
 ```bash
-mkdir -p ~/lab11/redis
-cd ~/lab11/redis
-
-for policy in no everysec always; do
-  docker rm -f redis-$policy 2>/dev/null
-  docker run -d --name redis-$policy -p 637${policy:0:1}:6379 \
-    -v $(pwd)/$policy:/data \
-    redis:7 \
-    redis-server --appendonly yes --appendfsync $policy
-done
-
-docker ps --format 'table {{.Names}}\t{{.Ports}}'
+cd code/ch11-redis-etcd
+bash scripts/redis-lab-up.sh ~/lab11/redis
 ```
 
-(The port trick uses the first character of the policy name; in
-practice, use `6379/6380/6381` explicitly in the `docker run`.)
+This creates:
+- `redis-no` on port **6379** (appendfsync no)
+- `redis-everysec` on port **6380** (appendfsync everysec)
+- `redis-always` on port **6381** (appendfsync always)
+
+Verify:
+
+```bash
+redis-cli -p 6379 PING
+redis-cli -p 6380 PING
+redis-cli -p 6381 PING
+```
 
 ### A.2 Benchmark each
 
@@ -358,8 +360,10 @@ lab11/
 ## Cleanup
 
 ```bash
-docker stop redis-no redis-everysec redis-always etcd-lab minio-lab 2>/dev/null
-docker rm   redis-no redis-everysec redis-always etcd-lab minio-lab 2>/dev/null
+cd code/ch11-redis-etcd
+bash scripts/redis-lab-down.sh
+docker stop etcd-lab minio-lab 2>/dev/null || true
+docker rm   etcd-lab minio-lab 2>/dev/null || true
 rm -rf ~/lab11
 ```
 

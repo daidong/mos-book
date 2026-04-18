@@ -39,7 +39,10 @@ relevant dimension:
 | Object store (S3) | 50–200 ms | 11 nines (erasure coded) | Effectively unlimited | Cheap |
 
 No system wins on every dimension. **The tradeoffs are the
-lesson.** A cache is fast and lossy; an object store is slow and
+lesson.**
+
+![Storage design map positioning Redis, etcd, LSM-based systems, and object stores on axes of latency, durability, consistency, and cost](figures/week10b-design-map.svg)
+*Figure 11.1: The storage design landscape. Each system occupies a different region of the latency–durability–consistency–cost space. No single design wins everywhere.* A cache is fast and lossy; an object store is slow and
 nearly indestructible; everything in between is a negotiation.
 
 A recurring pattern: every layer above local ext4 is built *on
@@ -109,6 +112,9 @@ bbolt B+ tree                          ← apply committed entry
 ACK to client
 ```
 
+![etcd write and watch path: client Put flows through Raft proposal to WAL fsync to bbolt apply; Watch streams revisions to controllers](figures/week10b-etcd-write-watch.svg)
+*Figure 11.2: The etcd write and watch path. Writes flow through Raft consensus to the WAL and then to bbolt. Watch streams revisions to controllers — this is the mechanism behind Kubernetes's reconciliation loops.*
+
 Two persistence layers:
 
 - **WAL.** Sequential append-only log of Raft entries. `fdatasync`
@@ -150,6 +156,9 @@ warns against running etcd on congested disks.
 Redis occupies a different point on the spectrum: primary
 storage is RAM, and durability is *optional*. Two complementary
 mechanisms.
+
+![Redis architecture: all data in RAM; RDB takes periodic fork+COW snapshots; AOF appends every command to a log with tunable fsync](figures/week10b-redis-architecture.svg)
+*Figure 11.3: Redis architecture. Primary data lives in RAM for sub-millisecond access. RDB and AOF provide two orthogonal durability paths — one snapshot-based, one log-based.*
 
 ### RDB: periodic snapshots via fork + COW
 
@@ -258,6 +267,28 @@ Updates are expressed as replacement: upload a new object with
 the same key; the old object is logically gone (and physically
 reclaimed by garbage collection). **Versioning** is implemented
 by keeping all old versions around and indexing them separately.
+
+### LSM trees and append-first storage
+
+Between the in-memory world of Redis and the replicated metadata
+store of etcd sits another major design family: **Log-Structured
+Merge trees (LSM)**. Systems like RocksDB, LevelDB, Cassandra, and
+TiKV use this pattern.
+
+The idea: writes go first to an in-memory buffer (the **memtable**).
+When the memtable fills, it is flushed to disk as a sorted,
+immutable file (an **SSTable**). Background **compaction** merges
+overlapping SSTables to reclaim space and keep read amplification
+bounded.
+
+![LSM tree lifecycle: writes to memtable, flush to L0 SSTables, compaction merges levels, reads check memtable then each level](figures/week10b-lsm-life.svg)
+*Figure 11.4: The LSM lifecycle. Writes are always sequential (append to memtable, flush to SSTable). Reads may check multiple levels. Compaction is the background tax that keeps the system healthy — and is the primary source of write amplification and tail-latency spikes in LSM-based stores.*
+
+LSM trees trade read amplification (checking multiple levels) for
+write throughput (all writes are sequential). Compaction is the
+ongoing cost: it rewrites data that has not changed, consuming I/O
+bandwidth and CPU. Heavy compaction under load is the LSM equivalent
+of ext4 journal contention — it inflates p99 for the same reason.
 
 ### Multipart upload and large objects
 

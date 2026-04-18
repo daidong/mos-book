@@ -1,7 +1,9 @@
-# Lab 5 Option A: CPU Throttling Experiment
-# 
-# This pod has a tight CPU limit (100m = 0.1 cores)
-# When you run CPU-intensive work inside, it will be throttled.
+# Lab 5 Part B: CPU Throttling Experiment
+#
+# This Pod has a tight CPU limit (200m = 0.2 cores) and auto-starts
+# stress-ng with 2 CPU workers.  Because two workers try to use
+# 200 % of a core but only 20 % is allowed, CFS bandwidth control
+# throttles hard.  Watch nr_throttled climb in cpu.stat.
 
 apiVersion: v1
 kind: Pod
@@ -14,18 +16,24 @@ spec:
   containers:
   - name: stress
     image: ubuntu:22.04
-    command: ["sleep", "infinity"]
+    command:
+    - /bin/bash
+    - -c
+    - |
+      apt-get update -qq && apt-get install -y -qq stress-ng >/dev/null 2>&1
+      echo "Starting stress-ng --cpu 2 under a 200m CPU limit..."
+      stress-ng --cpu 2 --timeout 0
     resources:
       requests:
-        cpu: "100m"
+        cpu: "200m"
         memory: "64Mi"
       limits:
-        cpu: "100m"      # 0.1 CPU = 10% of one core
+        cpu: "200m"       # 0.2 CPU — will throttle immediately
         memory: "128Mi"
   restartPolicy: Never
 
 ---
-# Higher limit variant for comparison
+# Higher-limit variant for comparison (Part B follow-up)
 apiVersion: v1
 kind: Pod
 metadata:
@@ -37,12 +45,18 @@ spec:
   containers:
   - name: stress
     image: ubuntu:22.04
-    command: ["sleep", "infinity"]
+    command:
+    - /bin/bash
+    - -c
+    - |
+      apt-get update -qq && apt-get install -y -qq stress-ng >/dev/null 2>&1
+      echo "Starting stress-ng --cpu 2 under a 500m CPU limit..."
+      stress-ng --cpu 2 --timeout 0
     resources:
       requests:
-        cpu: "100m"
+        cpu: "200m"
         memory: "64Mi"
       limits:
-        cpu: "500m"      # 0.5 CPU = 50% of one core
+        cpu: "500m"       # 0.5 CPU — less throttling
         memory: "128Mi"
   restartPolicy: Never

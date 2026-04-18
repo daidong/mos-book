@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500">
+  <defs>
+    <style>
+      .title { font: 700 28px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 16px Arial, Helvetica, sans-serif; fill: #475569; }
+      .node { font: 700 22px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .role { font: 600 15px Arial, Helvetica, sans-serif; fill: #475569; }
+      .body { font: 500 15px Arial, Helvetica, sans-serif; fill: #334155; }
+      .step { font: 700 14px Arial, Helvetica, sans-serif; fill: white; }
+      .note { font: 700 15px Arial, Helvetica, sans-serif; fill: #334155; }
+    </style>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#94a3b8" flood-opacity="0.25"/>
+    </filter>
+    <marker id="blueArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#3b82f6"/>
+    </marker>
+    <marker id="grayArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="500" fill="#f8fafc"/>
+  <text x="40" y="42" class="title">Replicated write path: the reply point moves to the quorum</text>
+  <text x="40" y="70" class="subtitle">The leader cannot promise durability just because it has the write locally. It must gather enough replicas to carry the write forward.</text>
+
+  <ellipse cx="715" cy="220" rx="295" ry="170" fill="#ede9fe" opacity="0.65"/>
+  <text x="617" y="82" class="note">majority survives failover</text>
+
+  <g filter="url(#shadow)">
+    <rect x="60" y="180" rx="24" ry="24" width="190" height="120" fill="#dbeafe" stroke="#60a5fa" stroke-width="3"/>
+    <text x="115" y="225" class="node">Client</text>
+    <text x="105" y="255" class="body">PUT(x, 42)</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="440" y="110" rx="28" ry="28" width="250" height="160" fill="#ffffff" stroke="#8b5cf6" stroke-width="3"/>
+    <text x="518" y="152" class="node">Leader</text>
+    <text x="505" y="178" class="role">accepts the write</text>
+    <rect x="485" y="200" rx="12" ry="12" width="160" height="42" fill="#ede9fe"/>
+    <text x="510" y="227" class="body">append + persist</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="820" y="70" rx="28" ry="28" width="250" height="140" fill="#ffffff" stroke="#22c55e" stroke-width="3"/>
+    <text x="880" y="112" class="node">Follower 1</text>
+    <text x="867" y="138" class="role">replica receives entry</text>
+    <rect x="868" y="156" rx="12" ry="12" width="152" height="34" fill="#dcfce7"/>
+    <text x="893" y="178" class="body">persist entry</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="820" y="270" rx="28" ry="28" width="250" height="140" fill="#ffffff" stroke="#38bdf8" stroke-width="3"/>
+    <text x="880" y="312" class="node">Follower 2</text>
+    <text x="864" y="338" class="role">replica receives entry</text>
+    <rect x="868" y="356" rx="12" ry="12" width="152" height="34" fill="#e0f2fe"/>
+    <text x="893" y="378" class="body">persist entry</text>
+  </g>
+
+  <line x1="250" y1="230" x2="438" y2="200" stroke="#3b82f6" stroke-width="5" marker-end="url(#blueArrow)"/>
+  <circle cx="330" cy="200" r="16" fill="#3b82f6"/><text x="325" y="205" class="step">1</text>
+
+  <line x1="690" y1="175" x2="818" y2="140" stroke="#64748b" stroke-width="5" marker-end="url(#grayArrow)"/>
+  <circle cx="748" cy="148" r="16" fill="#64748b"/><text x="743" y="153" class="step">2</text>
+
+  <line x1="690" y1="205" x2="818" y2="330" stroke="#64748b" stroke-width="5" marker-end="url(#grayArrow)"/>
+  <circle cx="753" cy="253" r="16" fill="#64748b"/><text x="748" y="258" class="step">3</text>
+
+  <line x1="820" y1="140" x2="692" y2="160" stroke="#16a34a" stroke-width="5" marker-end="url(#grayArrow)"/>
+  <circle cx="758" cy="126" r="16" fill="#16a34a"/><text x="753" y="131" class="step">4</text>
+
+  <line x1="440" y1="230" x2="250" y2="260" stroke="#f59e0b" stroke-width="5" marker-end="url(#grayArrow)"/>
+  <circle cx="356" cy="274" r="16" fill="#f59e0b"/><text x="351" y="279" class="step">5</text>
+
+  <text x="292" y="170" class="body">1. client sends write</text>
+  <text x="740" y="113" class="body">2. leader replicates</text>
+  <text x="755" y="286" class="body">3. followers persist</text>
+  <text x="690" y="105" class="body">4. majority ack</text>
+  <text x="282" y="315" class="body">5. now reply OK</text>
+
+  <rect x="40" y="430" rx="18" ry="18" width="1120" height="42" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="75" y="457" class="note">Teaching point: the honest reply point is a policy decision. If you reply before the majority, you are choosing speed over survival.</text>
+</svg>

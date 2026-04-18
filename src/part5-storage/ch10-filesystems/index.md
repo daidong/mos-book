@@ -103,12 +103,18 @@ lookup, readahead, and block I/O described in §10.3.
 
 ### Inodes, directories, hard links
 
+![Hard links and soft links: two directory entries can point at the same inode; a symbolic link is a separate inode whose content is a path string](figures/hardlink-softlink.png)
+*Figure 10.1: Hard links vs soft links. A hard link is a second directory entry pointing at the same inode — both names are equally "real." A symbolic link is a separate inode whose content is a path string; it can break if the target is removed.*
+
 Crucial detail: **the filename is not in the inode**. The inode
 holds metadata (permissions, size, timestamps, extent pointers);
 the name lives in a directory entry that maps `(name → inode#)`.
 That separation is what makes hard links possible — two
 directory entries can point at the same inode, which is why
 `ls -l` shows multiple names for one underlying file.
+
+![A directory is a table of (name, inode number) pairs](figures/directoryList.png)
+*Figure 10.2: A directory is a file whose content is a list of (name, inode#) entries. Lookup is O(n) in a linear list; modern filesystems use hash trees (ext4 HTree) or B+ trees (XFS) for O(1) or O(log n).*
 
 A directory is just a file whose content is a table of `(name,
 inode#)` pairs. Early filesystems stored it as a linked list
@@ -216,6 +222,12 @@ ext4 is the default filesystem on Ubuntu, Debian, and RHEL. It
 descends from the FFS lineage (FFS → ext2 → ext3 → ext4) and
 incorporates thirty years of filesystem-design lessons.
 
+![FFS cylinder group layout: each group contains a superblock copy, group descriptor, bitmaps, inode table, and data blocks](figures/FFS.png)
+*Figure 10.3: The FFS (Fast File System) cylinder-group layout that ext4 inherits. Keeping inodes and data blocks in the same group reduces seeks on rotational media and improves locality on SSDs.*
+
+![FFS cylinder group detail: inode table, block bitmap, and data blocks within a group, with arrows showing how the allocator keeps related data together](figures/FFS-cylGroup.png)
+*Figure 10.4: Inside a block group. The allocator places a file's inode near its data blocks and files from the same directory in the same group.*
+
 Every filesystem must answer three questions:
 
 | Decision | ext4's answer |
@@ -225,6 +237,9 @@ Every filesystem must answer three questions:
 | Locality | **Block groups** + **delayed allocation** |
 
 ### Disk layout
+
+![ext4 disk layout: boot sector followed by block groups, each containing superblock copy, group descriptor, bitmaps, inode table, and data blocks](figures/example.png)
+*Figure 10.5: ext4 disk layout. The filesystem is divided into block groups; each group contains its own metadata (superblock copy, bitmaps, inode table) and data blocks.*
 
 ```text
 ┌────────┬──────────────┬──────────────┬───────────┬─────┐
@@ -406,6 +421,12 @@ Amplification matters for three reasons:
   less available bandwidth for useful work.
 - **Tail latency.** More I/O means more queue depth and worse
   p99 — the same mechanism Chapter 3 saw in memory pressure.
+
+![Copy-on-write: when a shared page is modified, the kernel copies it to a new location before writing, leaving the original intact](figures/COWplace.png)
+*Figure 10.6: Copy-on-write placement. A write to a shared page triggers a copy to a new location; the original remains intact for other readers (or snapshot consumers).*
+
+![Copy-on-write update: the old block is preserved, a new block is written, and the pointer is redirected](figures/COWupdate.png)
+*Figure 10.7: Copy-on-write update. The old block is preserved for snapshots or crash recovery; the new block is written elsewhere; the pointer tree is updated to reference it. Btrfs and ZFS use this throughout; ext4 uses it only during journal replay.*
 
 Overlay filesystems (Chapter 6) add another layer: a write to a
 file in the lower layer triggers a **copy-up** of the entire

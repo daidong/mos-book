@@ -44,6 +44,9 @@ the end of this chapter makes the point with a few hundred lines of
 C. When you can build a container runtime from `clone()` and
 cgroup writes, you stop thinking of containers as magic.
 
+![A container is a normal Linux process with two additions: namespaces restricting its view of system resources, and cgroups limiting how much it can consume](figures/container_is_process.svg)
+*Figure 6.1: A container is an ordinary process. Namespaces restrict what it can see; cgroups restrict what it can use. There is no "container" kernel object — the isolation is built from the same process mechanisms Chapter 4 introduced.*
+
 > **Key insight:** Containers do not add new OS abstractions; they
 > partition existing ones. PID namespaces partition the process
 > table. Mount namespaces partition the mount tree. cgroup memory
@@ -148,6 +151,9 @@ new namespace objects, and attaches the result to the child.
 Different tasks sharing `nsproxy` see the same namespaces; different
 tasks with different `nsproxy`s do not. That is the entire
 mechanism.
+
+![task_struct fields that implement container identity: nsproxy points to namespace objects, cred holds credentials, cgroups points to cgroup memberships](figures/process_pointers.svg)
+*Figure 6.2: The kernel's view of a container is just three pointers in `task_struct`. `nsproxy` determines which namespaces the process sees; `cred` determines its capabilities; `cgroups` determines its resource budget. Different runtime tools compose these pointers differently, but the kernel mechanism is the same.*
 
 Container identity, then, is not a separate concept. A "container"
 is the set of tasks sharing an `nsproxy` (and, typically, a
@@ -290,10 +296,24 @@ lowers. Writes copy the modified file into the upper layer
 (copy-on-write) — which is why starting a container feels instant:
 you are reusing the same lower layers Docker cached yesterday.
 
+![OverlayFS layers: read-only lower layers stacked with a writable upper layer, merged into a single unified view; writes copy files into the upper layer](figures/overlayfs_layers.svg)
+*Figure 6.3: OverlayFS composes read-only image layers with a writable upper layer. Reads fall through to the first layer that has the file; writes copy the file into the upper layer (copy-on-write). This is why starting a container is fast: the lower layers are shared and cached.*
+
 For this book, the important observation is that OverlayFS is a
 regular Linux filesystem. You can `mount -t overlay` it yourself
 without Docker. Image distribution (registries, content-addressable
 layers) is a userspace convention built on top.
+
+### Putting it all together: the container creation timeline
+
+The full sequence — `clone` with namespace flags, write UID/GID
+maps, set up mounts and `pivot_root`, write cgroup limits, `exec`
+the user program — is what a container runtime does on every
+`docker run` or `kubectl create pod`. Figure 6.4 shows the timeline
+end-to-end.
+
+![Container creation timeline: parent calls clone with namespace flags, writes UID map and cgroup limits; child calls pivot_root, mounts /proc, then exec's the user command](figures/container_create_timeline.svg)
+*Figure 6.4: The container creation timeline. The parent process orchestrates namespace and cgroup setup; the child enters the isolated environment and exec's the workload. The entire sequence is ordinary syscalls — no hypervisor, no special kernel module.*
 
 ## 6.6 Rootless Containers
 
@@ -351,6 +371,30 @@ for high-assurance isolation. When you really need hardware-level
 separation, use a VM (or a lightweight VM like gVisor or
 Kata Containers).
 
+## 6.7 Beyond Namespaces and Cgroups: seccomp and Capabilities
+
+Namespaces and cgroups are the two primary isolation axes, but
+production runtimes add a third: **syscall filtering**.
+
+**Linux capabilities** split the traditional root/non-root binary
+into ~40 fine-grained permissions. A container runtime typically
+drops all capabilities except a small whitelist (`CAP_NET_BIND_SERVICE`,
+`CAP_CHOWN`, a few others). This limits what even UID 0 inside the
+container can do.
+
+**seccomp-bpf** goes further: it installs a BPF filter that runs on
+every syscall and decides whether to allow, deny, or kill. Docker's
+default seccomp profile blocks roughly 40–50 syscalls that
+containers almost never need (`mount`, `reboot`, `kexec_load`,
+various kernel-module operations). Kubernetes applies its own
+default profile starting with v1.27.
+
+For this book, the important observation is structural: namespaces
+restrict *which resources* a process sees, cgroups restrict *how
+much* it can use, and seccomp restricts *what operations* it can
+perform. Together, they form a defense-in-depth stack — each layer
+catching things the others miss.
+
 ## Summary
 
 Key takeaways from this chapter:
@@ -370,6 +414,9 @@ Key takeaways from this chapter:
 - Rootless containers map container UID 0 to an unprivileged host
   UID via user namespaces. They reduce risk but do not eliminate
   the shared-kernel threat.
+- Production runtimes add a third axis: syscall filtering via
+  capabilities and seccomp-bpf, restricting what operations a
+  container can perform.
 
 ## Further Reading
 

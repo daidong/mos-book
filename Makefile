@@ -33,9 +33,9 @@ check:
 	@echo "Checking for broken links..."
 	@find $(SRC_DIR) -name '*.md' -exec grep -l '\[.*\](.*\.md)' {} \; | \
 		while read f; do \
-			grep -oP '\]\(\K[^)]+\.md' "$$f" | while read link; do \
+			perl -nle 'while (/\]\(([^)]+\.md)\)/g) { print $$1 }' "$$f" | while read link; do \
 				dir=$$(dirname "$$f"); \
-				target=$$(realpath --relative-to=. "$$dir/$$link" 2>/dev/null || echo "MISSING"); \
+				target="$$dir/$$link"; \
 				if [ ! -f "$$target" ]; then \
 					echo "BROKEN: $$f -> $$link"; \
 				fi; \

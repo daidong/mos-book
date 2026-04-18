@@ -56,7 +56,7 @@
       ],
       "rules": {
         "cat": {
-          "regex": "^cat (/proc/(meminfo|vmstat)|/sys/fs/cgroup/[^ ]+/(memory\.current|memory\.max|memory\.events))$",
+          "regex": "^cat (/proc/(meminfo|vmstat)|/sys/fs/cgroup/[^ ]+/(memory\\\\.current|memory\\\\.max|memory\\\\.events))$",
           "error": "only a few /proc and cgroup files are available"
         },
         "grep": {
@@ -100,6 +100,12 @@
 
     "grep -E pgmajfault /proc/vmstat": "pgmajfault 129834\n",
 
-    "dmesg -T": "[Mon Feb 17 01:47:12 2026] order-service: tail latency alert fired (p99 > 500ms)\n[Mon Feb 17 01:49:03 2026] Memory cgroup out of memory: Killed process 2311 (warmup-worker) total-vm:402812kB, anon-rss:212340kB, file-rss:0kB, shmem-rss:0kB\n[Mon Feb 17 01:49:03 2026] oom_reaper: reaped process 2311 (warmup-worker), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB\n[Mon Feb 17 01:52:44 2026] order-service: recovered but p99 still spiky\n"
+    "dmesg -T": "[Mon Feb 17 01:47:12 2026] order-service: tail latency alert fired (p99 > 500ms)\n[Mon Feb 17 01:49:03 2026] Memory cgroup out of memory: Killed process 2311 (warmup-worker) total-vm:402812kB, anon-rss:212340kB, file-rss:0kB, shmem-rss:0kB\n[Mon Feb 17 01:49:03 2026] oom_reaper: reaped process 2311 (warmup-worker), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB\n[Mon Feb 17 01:52:44 2026] order-service: recovered but p99 still spiky\n",
+
+    "ps -eo pid,user,%cpu,%mem,stat,comm": "  PID USER     %CPU %MEM STAT COMMAND\n    1 root      0.0  0.1 Ss   systemd\n 2110 app      22.0 40.0 Sl   order-service\n  911 root      2.0  1.4 Ssl  node-exporter\n  345 root      0.0  0.0 S    kswapd0\n",
+
+    "ss -s": "Total: 142 (kernel 0)\nTCP:   84 (estab 31, closed 28, orphaned 0, timewait 25)\nTransport Total     IP        IPv6\n*         0         -         -\nRAW       0         0         0\nUDP       4         3         1\nTCP       56        42        14\nINET      60        45        15\nFRAG      0         0         0\n",
+
+    "cat /proc/meminfo": "MemTotal:        2097152 kB\nMemFree:           67584 kB\nMemAvailable:     114688 kB\nBuffers:           18432 kB\nCached:           319488 kB\nSwapCached:        12288 kB\nSwapTotal:       2097152 kB\nSwapFree:        1751040 kB\n"
   }
 }

@@ -62,8 +62,8 @@
         "vmstat": { "regex": "^vmstat( [0-9]+ [0-9]+)?$", "error": "vmstat usage: vmstat 1 5" },
         "dmesg": { "regex": "^dmesg -T$", "error": "dmesg usage: dmesg -T" },
         "journalctl": { "regex": "^journalctl -n [0-9]+$", "error": "journalctl usage: journalctl -n 20" },
-        "cat": { "regex": "^cat (/proc/(diskstats|loadavg)|/var/log/app\.log)$", "error": "cat is limited" },
-        "grep": { "regex": "^grep -E [A-Za-z0-9|]+ (/var/log/app\.log|/proc/loadavg)$", "error": "grep is limited" }
+        "cat": { "regex": "^cat (/proc/(diskstats|loadavg)|/var/log/app\\\\.log)$", "error": "cat is limited" },
+        "grep": { "regex": "^grep -E [A-Za-z0-9|]+ (/var/log/app\\\\.log|/proc/loadavg)$", "error": "grep is limited" }
       }
     }
   },
@@ -83,6 +83,18 @@
 
     "journalctl -n 20": "Feb 17 04:21:10 checkout-host checkout-service[2101]: slow request: queue_commit=812ms payment_rpc=95ms total=1012ms\nFeb 17 04:21:14 checkout-host checkout-service[2101]: slow request: queue_commit=902ms payment_rpc=88ms total=1120ms\nFeb 17 04:21:18 checkout-host checkout-service[2101]: retrying payment rpc after upstream timeout\n",
 
-    "ss -s": "Total: 271 (kernel 0)\nTCP:   152 (estab 54, closed 68, orphaned 0, timewait 68)\nTransport Total     IP        IPv6\n*         0         -         -\nRAW       0         0         0\nUDP       6         5         1\nTCP       84        61        23\nINET      90        66        24\nFRAG      0         0         0\n"
+    "ss -s": "Total: 271 (kernel 0)\nTCP:   152 (estab 54, closed 68, orphaned 0, timewait 68)\nTransport Total     IP        IPv6\n*         0         -         -\nRAW       0         0         0\nUDP       6         5         1\nTCP       84        61        23\nINET      90        66        24\nFRAG      0         0         0\n",
+
+    "cat /proc/diskstats": " 259       0 nvme0n1 81204 3120 1821040 42180 192310 88120 4210880 312400 0 98200 354580\n 259       1 nvme0n1p1 80940 3100 1818320 42040 192210 88100 4210240 312100 0 98100 354140\n",
+
+    "cat /proc/loadavg": "1.12 0.88 0.71 1/175 4210\n",
+
+    "cat /var/log/app.log": "[04:21:08] checkout: request id=a4f2 queue_commit=812ms (fsync) payment_rpc=95ms total=1012ms\n[04:21:12] checkout: request id=b3e1 queue_commit=902ms (fsync) payment_rpc=88ms total=1120ms\n[04:21:14] checkout: request id=c7d0 queue_commit=4ms payment_rpc=91ms total=102ms\n[04:21:15] checkout: request id=d1a9 queue_commit=3ms payment_rpc=87ms total=96ms\n[04:21:18] checkout: upstream timeout on payment_rpc for id=e2b4 (stalled in queue_commit=1100ms)\n[04:21:19] checkout: retrying payment_rpc for id=e2b4\n[04:21:20] checkout: request id=f0c3 queue_commit=5ms payment_rpc=93ms total=105ms\n",
+
+    "grep -E fsync /var/log/app.log": "[04:21:08] checkout: request id=a4f2 queue_commit=812ms (fsync) payment_rpc=95ms total=1012ms\n[04:21:12] checkout: request id=b3e1 queue_commit=902ms (fsync) payment_rpc=88ms total=1120ms\n",
+
+    "grep -E timeout /var/log/app.log": "[04:21:18] checkout: upstream timeout on payment_rpc for id=e2b4 (stalled in queue_commit=1100ms)\n",
+
+    "ps -eo pid,user,%cpu,%mem,stat,comm": "  PID USER     %CPU %MEM STAT COMMAND\n    1 root      0.0  0.1 Ss   systemd\n 2101 app      68.0  5.6 Sl   checkout-service\n  890 root      0.5  0.2 Ssl  node-exporter\n  412 root      0.0  0.0 S    jbd2/nvme0n1p1-\n"
   }
 }

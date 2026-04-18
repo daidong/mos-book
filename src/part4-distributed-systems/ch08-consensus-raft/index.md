@@ -213,6 +213,9 @@ Each node is in one of three states:
 - **Leader.** Handles all client writes; replicates log entries
   to followers.
 
+![Raft node state machine: Follower transitions to Candidate on election timeout, Candidate transitions to Leader on majority vote, both Candidate and Leader revert to Follower on discovering a higher term](figures/raft-state-machine.svg)
+*Figure 8.1: The Raft state machine. Every node starts as a Follower. An election timeout promotes it to Candidate; a majority vote makes it Leader. Discovering a higher term from any message demotes a node back to Follower. Split votes cause a new election with a fresh random timeout.*
+
 ### Leader election
 
 A follower starts an election if it does not hear from a leader
@@ -318,6 +321,9 @@ Three persistence layers matter:
   committed entries.
 
 ### Tracing a Put
+
+![etcd write path: client sends gRPC Put to leader, which appends to log, fsyncs WAL, sends AppendEntries to followers in parallel, waits for majority ack, applies to bbolt, and replies](figures/etcd-write-path.svg)
+*Figure 8.2: The etcd write path. Each step has a measurable cost; the dominant one is WAL fsync (~1–4 ms). The followers fsync in parallel, so the network round-trip (~0.2 ms) overlaps with the leader's own fsync. Total per-write latency: 2–10 ms on typical hardware.*
 
 ```text
 Client ──gRPC Put──▶ Leader

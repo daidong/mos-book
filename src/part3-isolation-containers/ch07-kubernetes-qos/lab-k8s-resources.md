@@ -149,7 +149,8 @@ climb.
 
 ```bash
 kubectl apply -f manifests/cpu-stress.yaml
-# The manifest requests and limits cpu: "200m" and runs `stress-ng --cpu 2`.
+# The manifest sets limits.cpu: "200m" and auto-starts stress-ng --cpu 2.
+# Two workers competing for 0.2 of a core will throttle immediately.
 ```
 
 ### B.2 Watch the cgroup
@@ -201,8 +202,9 @@ and find the matching kernel record.
 
 ```bash
 kubectl apply -f manifests/mem-stress.yaml
-# The manifest sets memory limits to 128Mi and runs a program that
-# allocates 256Mi.
+# The manifest sets limits.memory: "128Mi" and auto-starts a Python
+# script that allocates 256 MiB in 4 MiB steps.  The kernel will
+# OOM-kill the process before it finishes.
 ```
 
 ### C.2 Observe the Kill

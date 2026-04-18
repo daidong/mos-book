@@ -80,7 +80,7 @@ but it may not win on makespan or utilization.
 ### A.5 Run and compare
 
 ```bash
-cd code/ch09-cluster-sched
+cd code/ch09-cluster-sched/sim
 python3 scheduler_sim.py
 ```
 
