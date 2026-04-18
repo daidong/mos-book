@@ -16,7 +16,7 @@ default-theme = "light"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/daidong/mos-book"
 edit-url-template = "https://github.com/daidong/mos-book/edit/main/{path}"
-additional-css = []
+additional-css = ["theme/css/academic.css"]
 mathjax-support = true
 
 [output.html.fold]
