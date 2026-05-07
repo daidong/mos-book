@@ -121,24 +121,28 @@ html.rust .page {
 
 /* Override mdBook's default content max-width so the textbook measure
    below has room to breathe. Default is 750px, which crushes a serif
-   body at 1.18rem. ~960px holds a 48em prose column comfortably. */
+   body. ~1080px holds a 36em prose column at 1.26rem comfortably and
+   leaves room for slightly wider tables, code blocks, and figures. */
 :root {
-    --content-max-width: 960px;
+    --content-max-width: 1080px;
 }
 
 .content main {
     font-family: var(--mos-serif);
-    font-size: 1.18rem;
-    line-height: 1.62;
+    font-size: 1.26rem;        /* ~20.2px — comfortable for sustained reading */
+    line-height: 1.72;          /* serifs want more air than sans */
     color: var(--mos-body);
     hyphens: auto;
     text-rendering: optimizeLegibility;
+    font-feature-settings: "kern", "liga", "onum";
 }
 
-/* Comfortable measure for serif body type at 1.18rem: ~70 characters
-   per line, which matches a printed textbook page. */
+/* Comfortable measure for serif body type at 1.26rem: ~72-75 characters
+   per line, which matches a well-set printed textbook page (Bringhurst
+   recommends 66; Butterick 65-90; we land in the upper third because the
+   typeface is generous in width). */
 .content main > * {
-    max-width: 48em;
+    max-width: 36em;
     margin-left: auto;
     margin-right: auto;
 }
@@ -151,11 +155,11 @@ html.rust .page {
 .content main > div,
 .content main > figure,
 .content main > p > img {
-    max-width: 54em;
+    max-width: 44em;
 }
 
 /* Tighten leading inside lists (paragraphs inside <li> need less air). */
-.content main li > p { line-height: 1.55; }
+.content main li > p { line-height: 1.62; }
 
 /* ====================================================================
  * 4. Headings — chapter title, sections, subsections
@@ -179,13 +183,14 @@ html.rust .page {
    the text-indent / pseudo-element trick below pulls the chapter number
    into a small eyebrow above. */
 .content h1 {
-    font-size: 2.55rem;
-    line-height: 1.15;
-    margin-top: 0.6em;
-    margin-bottom: 1em;
-    padding-bottom: 0.3em;
+    font-size: 2.85rem;
+    line-height: 1.12;
+    margin-top: 0.4em;
+    margin-bottom: 1.05em;
+    padding-bottom: 0.32em;
     border-bottom: 1.5px solid var(--mos-accent);
     color: var(--mos-accent);
+    letter-spacing: -0.012em;
 }
 
 /* If the H1 begins with the literal "Chapter <number>:" pattern, render
@@ -197,51 +202,52 @@ html.rust .page {
 
 /* Numbered top-level sections (§N.M …). */
 .content h2 {
-    font-size: 1.55rem;
-    line-height: 1.3;
-    margin-top: 2.4em;
-    margin-bottom: 0.55em;
-    padding-bottom: 0.18em;
+    font-size: 1.78rem;
+    line-height: 1.25;
+    margin-top: 2.6em;
+    margin-bottom: 0.6em;
+    padding-bottom: 0.2em;
     border-bottom: 0.5px solid var(--mos-rule);
     color: var(--mos-ink);
 }
 
 /* §N.M.K subsection — italic serif, no rule. */
 .content h3 {
-    font-size: 1.22rem;
+    font-size: 1.38rem;
     font-weight: 600;
     font-style: italic;
-    margin-top: 1.9em;
-    margin-bottom: 0.35em;
+    margin-top: 2.1em;
+    margin-bottom: 0.4em;
     color: var(--mos-ink);
 }
 
 /* §N.M.K.L sub-subsection. Must stay above body size so the hierarchy
-   reads correctly (body is 1.18rem, so this lifts to 1.20rem). */
+   reads correctly (body is 1.26rem, so this lifts to 1.28rem). */
 .content h4 {
-    font-size: 1.20rem;
+    font-size: 1.28rem;
     font-weight: 700;
-    margin-top: 1.4em;
-    margin-bottom: 0.25em;
+    margin-top: 1.55em;
+    margin-bottom: 0.3em;
     color: var(--mos-ink);
     letter-spacing: 0.005em;
 }
 
 .content h5,
 .content h6 {
-    font-size: 1.10rem;
+    font-size: 1.16rem;
     font-weight: 700;
     color: var(--mos-muted);
-    margin-top: 1.2em;
-    margin-bottom: 0.25em;
+    margin-top: 1.3em;
+    margin-bottom: 0.3em;
 }
 
 /* The first paragraph after the H1 deserves a tiny lift — slightly
    larger, drop cap on first letter, no first-line indent. */
 .content h1 + p {
-    font-size: 1.22rem;
+    font-size: 1.34rem;
+    line-height: 1.65;
     color: var(--mos-ink);
-    margin-top: 0.4em;
+    margin-top: 0.5em;
 }
 
 .content h1 + p::first-letter {
@@ -249,9 +255,9 @@ html.rust .page {
     font-weight: 600;
     color: var(--mos-accent);
     float: left;
-    font-size: 3.2em;
-    line-height: 0.92;
-    padding: 0.05em 0.08em 0 0;
+    font-size: 3.4em;
+    line-height: 0.9;
+    padding: 0.04em 0.08em 0 0;
     margin-right: 0.04em;
 }
 
@@ -277,21 +283,21 @@ html.rust .page {
  * ================================================================== */
 
 .content p {
-    margin: 0 auto 1em;
+    margin: 0 auto 1.15em;
     color: var(--mos-body);
 }
 
 .content ul,
 .content ol {
-    padding-left: 1.6em;
+    padding-left: 1.7em;
 }
 
 .content li {
-    margin: 0.3em 0;
+    margin: 0.4em 0;
 }
 
 .content li p {
-    margin: 0.25em 0;
+    margin: 0.3em 0;
 }
 
 /* Section break: replace the default <hr> with a centered fleuron. */
@@ -325,13 +331,13 @@ html.rust .page {
  * ================================================================== */
 
 .content blockquote {
-    margin: 1.5em auto;
-    padding: 0.85em 1.2em 0.85em 1.4em;
+    margin: 1.7em auto;
+    padding: 0.95em 1.3em 0.95em 1.45em;
     border-left: 3px solid var(--mos-accent);
     background: var(--mos-tint);
     color: var(--mos-body);
-    font-size: 0.98em;
-    line-height: 1.62;
+    font-size: 1em;
+    line-height: 1.66;
     border-radius: 0 3px 3px 0;
 }
 
@@ -379,8 +385,8 @@ html.rust .page {
 /* "Learning objectives" callout — the first blockquote in a chapter.
    Treat the leading <strong> as a small-caps eyebrow. */
 .content h1 + blockquote {
-    margin-top: 1em;
-    padding: 1em 1.2em;
+    margin-top: 1.1em;
+    padding: 1.15em 1.3em;
     border-left: 4px solid var(--mos-accent);
     background: var(--mos-tint);
 }
@@ -389,9 +395,9 @@ html.rust .page {
     display: block;
     color: var(--mos-accent);
     font-variant: small-caps;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     font-size: 0.95em;
-    margin-bottom: 0.3em;
+    margin-bottom: 0.4em;
 }
 
 /* Inside any callout, the leading bold label gets the accent color. */
@@ -409,9 +415,9 @@ html.rust .page {
 
 .content table {
     border-collapse: collapse;
-    margin: 1.5em auto;
-    font-size: 0.95em;
-    line-height: 1.5;
+    margin: 1.7em auto;
+    font-size: 0.96em;
+    line-height: 1.55;
     border-spacing: 0;
     border-top:    1.5px solid var(--mos-ink);
     border-bottom: 1.5px solid var(--mos-ink);
@@ -423,7 +429,7 @@ html.rust .page {
 
 .content table th,
 .content table td {
-    padding: 0.45em 0.95em;
+    padding: 0.55em 1em;
     border: none;
     text-align: left;
     vertical-align: top;
@@ -456,7 +462,7 @@ html.rust .page {
     font-size: 0.92em;
     background: var(--mos-code-bg);
     color: var(--mos-ink);
-    padding: 0.06em 0.32em;
+    padding: 0.08em 0.36em;
     border-radius: 2px;
     border: 0.5px solid rgba(0, 0, 0, 0.05);
 }
@@ -469,14 +475,14 @@ html.rust .page {
 
 .content pre {
     font-family: var(--mos-mono);
-    font-size: 0.91em;
-    line-height: 1.55;
+    font-size: 0.94em;
+    line-height: 1.6;
     background: var(--mos-code-bg);
     border: 1px solid var(--mos-rule);
     border-radius: 4px;
-    padding: 0.95em 1.1em;
+    padding: 1.05em 1.2em;
     overflow-x: auto;
-    margin: 1.3em auto;
+    margin: 1.5em auto;
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.025);
 }
 
@@ -502,7 +508,7 @@ html.rust .page {
     max-width: 100%;
     height: auto;
     display: block;
-    margin: 1.4em auto 0.4em;
+    margin: 1.6em auto 0.45em;
     border-radius: 2px;
 }
 
@@ -511,11 +517,11 @@ html.rust .page {
 .content main p:has(> img:only-child) + p > em:only-child {
     display: block;
     text-align: center;
-    font-size: 0.92em;
+    font-size: 0.94em;
     color: var(--mos-muted);
-    margin: -0.3em auto 1.8em;
-    max-width: 44em;
-    line-height: 1.45;
+    margin: -0.2em auto 2em;
+    max-width: 38em;
+    line-height: 1.5;
 }
 
 /* Older browsers that don't support :has() get a softer italic at least. */
@@ -556,17 +562,17 @@ html.rust .page {
 
 .sidebar {
     font-family: var(--mos-sans);
-    font-size: 1.05rem;
-    line-height: 1.45;
+    font-size: 1.06rem;
+    line-height: 1.5;
 }
 
 .sidebar .sidebar-scrollbox {
-    padding: 1.2em 1.0em;
+    padding: 1.4em 1.05em;
 }
 
 .sidebar .chapter li.chapter-item {
-    line-height: 1.45;
-    padding: 0.22em 0;
+    line-height: 1.5;
+    padding: 0.28em 0;
 }
 
 /* Top-level chapters slightly bolder. */
@@ -622,7 +628,7 @@ html.rust .page {
 .menu-title {
     color: var(--mos-ink);
     font-family: var(--mos-sans);
-    font-size: 1.05rem;
+    font-size: 1.08rem;
 }
 
 /* ====================================================================
@@ -630,19 +636,21 @@ html.rust .page {
  * ================================================================== */
 
 @media (max-width: 1080px) {
-    .content main { font-size: 1.14rem; }
-    .content main > * { max-width: 44em; }
+    .content main { font-size: 1.22rem; line-height: 1.7; }
+    .content main > * { max-width: 34em; }
     .content main > table,
     .content main > pre,
     .content main > div,
     .content main > figure,
-    .content main > p > img { max-width: 50em; }
-    .content h1 { font-size: 2.25rem; }
-    .content h2 { font-size: 1.45rem; }
+    .content main > p > img { max-width: 42em; }
+    .content h1 { font-size: 2.5rem; }
+    .content h2 { font-size: 1.62rem; }
+    .content h3 { font-size: 1.32rem; }
+    .content h1 + p { font-size: 1.28rem; }
 }
 
 @media (max-width: 720px) {
-    .content main { font-size: 1.10rem; line-height: 1.6; }
+    .content main { font-size: 1.16rem; line-height: 1.66; }
     .content main > *,
     .content main > table,
     .content main > pre,
@@ -653,10 +661,10 @@ html.rust .page {
         padding-left: 0.4em;
         padding-right: 0.4em;
     }
-    .content h1 { font-size: 1.95rem; margin-bottom: 0.7em; }
-    .content h2 { font-size: 1.35rem; margin-top: 1.8em; }
-    .content h3 { font-size: 1.18rem; }
-    .content h1 + p { font-size: 1.14rem; }
+    .content h1 { font-size: 2.1rem; margin-bottom: 0.8em; }
+    .content h2 { font-size: 1.45rem; margin-top: 1.9em; }
+    .content h3 { font-size: 1.22rem; }
+    .content h1 + p { font-size: 1.22rem; }
     .content h1 + p::first-letter {
         float: none;
         font-size: inherit;
@@ -678,13 +686,13 @@ html.rust .page {
 @media print {
     html, body {
         font-family: var(--mos-serif);
-        font-size: 10.5pt;
+        font-size: 11pt;
         background: white !important;
     }
 
     .content main {
-        font-size: 10.5pt;
-        line-height: 1.45;
+        font-size: 11pt;
+        line-height: 1.5;
         color: #000;
     }
 
@@ -699,7 +707,7 @@ html.rust .page {
 
     .content h1 {
         break-before: page;
-        font-size: 22pt;
+        font-size: 24pt;
         margin-top: 0;
         padding-bottom: 0.25em;
         color: #000;
@@ -709,7 +717,7 @@ html.rust .page {
     .content h1:first-of-type { break-before: auto; }
 
     .content h2 {
-        font-size: 14.5pt;
+        font-size: 15.5pt;
         break-after: avoid;
         color: #000;
         border-bottom: 0.4pt solid #999;
