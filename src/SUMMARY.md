@@ -10,7 +10,7 @@
     - [Lab: Environment Setup](part1-foundations/ch01-introduction/lab-environment-setup.md)
 - [Chapter 2: Performance Measurement Methodology — Memory, Translation, and Evidence](part1-foundations/ch02-measurement-methodology/index.md)
     - [Lab: Quicksort Performance Analysis](part1-foundations/ch02-measurement-methodology/lab-quicksort-perf.md)
-- [Chapter 3: Tail Latency and Systematic Debugging](part1-foundations/ch03-tail-latency/index.md)
+- [Chapter 3: Systematic Debugging of Tail Latency — A Memory-Pressure Case Study](part1-foundations/ch03-tail-latency/index.md)
     - [Lab: PagerUSE Oncall Simulation](part1-foundations/ch03-tail-latency/lab-pageruse.md)
 
 ---

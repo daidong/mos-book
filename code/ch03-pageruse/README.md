@@ -1,6 +1,9 @@
 # PagerUSE
 
-PagerUSE is the Chapter 3 starter app for the oncall-simulation lab.
+PagerUSE is the Chapter 3 starter app for the oncall-simulation lab. The
+required path focuses on memory-pressure-induced tail latency: working-set
+growth, reclaim, major faults, and evidence-based exclusion of competing
+causes.
 
 ## What it does
 
@@ -43,9 +46,12 @@ Use the lab handout in
 truth. A good submission should preserve:
 
 1. initial hypotheses before command exploration;
-2. the order of commands issued;
-3. two supporting signals and one exclusion check;
-4. a mechanism-level explanation, not just a guess.
+2. a RED pass from the service view;
+3. a USE pass across CPU, memory, disk, and network;
+4. the order of commands issued;
+5. two supporting signals and one exclusion check;
+6. a memory-pressure mechanism explanation, not just a guess;
+7. the Part I synthesis table from the lab handout.
 
 ## Notes
 

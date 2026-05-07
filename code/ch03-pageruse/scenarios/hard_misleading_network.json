@@ -43,7 +43,7 @@
     "persona": {
       "prompt": "student@checkout-host:~$"
     },
-    "help": "Try: top -bn1 | vmstat 1 5 | dmesg -T | journalctl -n 20\nAnd compare: real vs user/sys via /usr/bin/time -v (simulated).",
+    "help": "Try: top -bn1 | vmstat 1 5 | dmesg -T | journalctl -n 20 | cat /var/log/app.log\nFocus: compare network symptoms with storage and application evidence.",
     "policy": {
       "maxLen": 140,
       "allow": [

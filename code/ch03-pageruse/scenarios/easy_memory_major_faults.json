@@ -35,7 +35,7 @@
     "persona": {
       "prompt": "student@order-host:~$"
     },
-    "help": "Allowed commands are intentionally limited. Examples:\n  top -bn1\n  free -m\n  vmstat 1 5\n  cat /proc/vmstat\n  grep -E pgmajfault\n  /usr/bin/time -v <cmd> (simulated)\n  dmesg | tail (pipes not allowed; use: dmesg -T)\n\nThis terminal does NOT execute on your machine.",
+    "help": "Allowed commands are intentionally limited. Examples:\n  top -bn1\n  free -m\n  vmstat 1 5\n  cat /proc/vmstat\n  grep -E pgmajfault /proc/vmstat\n  dmesg -T\n\nThis terminal does NOT execute on your machine.",
     "policy": {
       "maxLen": 120,
       "allow": [

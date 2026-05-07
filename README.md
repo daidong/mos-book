@@ -48,7 +48,7 @@ to run experiments in a VM.
 |---------|-------|-----|
 | 1 | [Introduction: OS in the Cloud-Native and AI Era](src/part1-foundations/ch01-introduction/index.md) | Environment Setup |
 | 2 | [Performance Measurement Methodology — Memory, Translation, and Evidence](src/part1-foundations/ch02-measurement-methodology/index.md) | Quicksort Performance Analysis |
-| 3 | [Tail Latency and Systematic Debugging](src/part1-foundations/ch03-tail-latency/index.md) | PagerUSE Oncall Simulation |
+| 3 | [Systematic Debugging of Tail Latency — A Memory-Pressure Case Study](src/part1-foundations/ch03-tail-latency/index.md) | PagerUSE Oncall Simulation |
 
 ### Part II: Process Management and Scheduling
 
