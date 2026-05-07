@@ -4,6 +4,9 @@
 
 A free, open-source textbook for senior undergraduate and graduate CS students.
 
+📖 **Read online:** <https://daidong.github.io/mos-book/>
+📄 **Download PDF:** [book.pdf](book.pdf) (single-volume print edition)
+
 ---
 
 ## What This Book Is About
@@ -77,39 +80,49 @@ to run experiments in a VM.
 
 ### Part VI: Operating Systems for the AI Era
 
-| Chapter | Topic | Lab |
-|---------|-------|-----|
-| 12 | [Agent Runtimes: Tool Calls as System Calls](src/part6-ai-era/ch12-agent-runtimes/index.md) | Build an Agent Sandbox |
-
-### Part VII: Putting It All Together
-
-| Chapter | Topic | Lab |
-|---------|-------|-----|
-| 13 | [Systems Research Methodology and Reproducibility](src/part7-synthesis/ch13-methodology-reproducibility/index.md) | Peer Reproduction Exercise |
+| Chapter | Topic | Labs |
+|---------|-------|------|
+| 12 | [Agent Runtimes: A New Substrate for OS Thinking](src/part6-ai-era/ch12-agent-runtimes/index.md) | Lab E: Build an Agent Sandbox; Lab F: Profile and Optimize a ReAct Agent |
 
 ### Appendices
 
 - [A — Capstone Projects](src/appendices/appendix-a-projects.md)
 - [B — Tool Reference](src/appendices/appendix-b-tool-reference.md)
 - [C — Environment Setup Guide](src/appendices/appendix-c-environment-setup.md)
+- [D — AI Use Policy](src/appendices/appendix-d-ai-policy.md)
 
 ## How to Build
 
 This book uses [mdBook](https://rust-lang.github.io/mdBook/) to generate
-HTML, PDF, and EPUB outputs.
+HTML, PDF, and EPUB outputs. Every push to `main` triggers a GitHub
+Actions workflow ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))
+that publishes the rendered site to GitHub Pages, so the public URL
+above always tracks the latest commit.
 
 ```bash
 # Install mdBook (requires Rust)
 cargo install mdbook
 
-# Build HTML
+# Build HTML (one-shot, exits cleanly)
 make html
 
-# Build PDF (requires mdbook-pdf backend)
-make pdf
+# Build, then open the rendered book in your browser
+# (no live-reload server — does not hang)
+make preview
 
-# Serve locally with live reload
+# Live-reload server at http://localhost:3000
+# (long-running; stop with Ctrl-C)
 make serve
+
+# Same as `make serve`, but auto-stops after T seconds
+# (safe for agents, scripts, smoke tests)
+make serve-bounded T=30
+
+# Validate all internal links and code blocks
+make check
+
+# Build PDF via headless Chrome on print.html
+make pdf
 ```
 
 See [Appendix C](src/appendices/appendix-c-environment-setup.md) for

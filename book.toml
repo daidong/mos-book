@@ -12,11 +12,13 @@ build-dir = "book"
 create-missing = false
 
 [output.html]
+site-url = "/mos-book/"
 default-theme = "light"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/daidong/mos-book"
 edit-url-template = "https://github.com/daidong/mos-book/edit/main/{path}"
 additional-css = ["theme/css/academic.css"]
+additional-js  = ["theme/callouts.js"]
 mathjax-support = true
 
 [output.html.fold]

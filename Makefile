@@ -23,15 +23,42 @@ CHROME ?= $(shell \
     [ -x "$$c" ] && echo "$$c" && break; \
   done)
 
-.PHONY: html pdf epub serve clean check
+.PHONY: html pdf epub serve serve-bounded preview clean check
 
-## html     : Build the book as a static HTML site
+## html     : Build the book as a static HTML site (one-shot, exits cleanly)
 html:
 	$(MDBOOK) build
 
-## serve    : Serve locally with live reload (http://localhost:3000)
+## preview  : Build, then open book/index.html in the default browser.
+##            No background server, so this never hangs an interactive session
+##            or an automated agent. Recommended for quick visual checks.
+preview: html
+	@if command -v open >/dev/null 2>&1; then \
+	  open "$(CURDIR)/$(OUT_DIR)/index.html"; \
+	elif command -v xdg-open >/dev/null 2>&1; then \
+	  xdg-open "$(CURDIR)/$(OUT_DIR)/index.html"; \
+	else \
+	  echo "Open this URL in a browser: file://$(CURDIR)/$(OUT_DIR)/index.html"; \
+	fi
+
+## serve    : Serve locally with live reload at http://localhost:3000.
+##            WARNING: this is a long-running process. Stop it with Ctrl-C.
+##            For automated runs (agents, CI), use `make serve-bounded T=30`
+##            or `make preview` instead.
 serve:
 	$(MDBOOK) serve --open
+
+## serve-bounded T=N : Serve, then auto-stop after N seconds (default 30).
+##                     Safe to use from agents / scripts. Returns exit 0.
+T ?= 30
+serve-bounded: html
+	@echo "Serving on http://localhost:3000 for $(T)s, then auto-stopping..."
+	@$(MDBOOK) serve --port 3000 > /tmp/mdbook-serve.log 2>&1 & \
+	  pid=$$!; \
+	  sleep $(T); \
+	  kill $$pid 2>/dev/null || true; \
+	  wait $$pid 2>/dev/null || true; \
+	  echo "Stopped. Log: /tmp/mdbook-serve.log"
 
 ## pdf      : Render the single-page print.html to a PDF via headless Chrome
 pdf: html

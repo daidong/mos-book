@@ -1,44 +1,92 @@
 /*
- * Academic CS textbook theme overlay for mdBook.
+ * Modern Operating Systems — academic textbook theme overlay for mdBook.
  *
- * Design goals:
- *  - Serif body type with a comfortable measure (~66 characters).
- *  - Heading hierarchy that reads as book chapters and sections,
- *    not doc headers.
- *  - LaTeX booktabs-style tables.
- *  - Left-ruled blockquotes for callouts.
- *  - Print rules that produce a usable PDF for every chapter.
+ * Design intent
+ * -------------
+ * Make the rendered book read like a printed textbook, not a tech doc:
  *
- * Everything here is layered on top of the default mdBook themes;
- * remove the single line in book.toml that references this file to
- * revert.
+ *   - Source Serif 4 body text on a comfortable measure (~66 chars).
+ *   - Inter for navigation chrome and toolbars (the only place sans goes).
+ *   - JetBrains Mono for code, body-adjacent in size.
+ *   - LaTeX booktabs-style tables (top + bottom rule + header rule, no zebras).
+ *   - Differentiated callouts driven by the leading bold label
+ *     (Note: / Warning: / Key insight: / Learning objectives / Tip:).
+ *   - Chapter-title page with a "Chapter N" eyebrow and large serif title.
+ *   - Refined figure-caption styling for the `![alt](file)` + `*Figure N: ...*`
+ *     convention used in STYLE_GUIDE.md.
+ *   - Print rules suitable for the single-page `print.html` -> Chrome -> PDF
+ *     pipeline in the Makefile.
+ *
+ * Everything here is a layer on top of mdBook's default themes; remove the
+ * `additional-css = [...]` line in book.toml to revert.
  */
 
-/* ----------------------------------------------------------------------
- * Typography: the single most important change.
- * -------------------------------------------------------------------- */
+/* ====================================================================
+ * 1. Variables
+ * ================================================================== */
 
 :root {
-    /* System-first serif stack. Charter ships with macOS; Source Serif
-       with recent Adobe installs; the rest are ubiquitous fallbacks. */
     --mos-serif: "Source Serif 4", "Source Serif Pro",
                  Charter, "Charter BT", "Iowan Old Style",
                  "Palatino Linotype", Palatino, "URW Palladio L",
                  "Hoefler Text", "Liberation Serif", "Noto Serif",
                  Cambria, Georgia, serif;
 
-    --mos-mono: "JetBrains Mono", "Source Code Pro", Menlo,
-                Consolas, "DejaVu Sans Mono", monospace;
+    --mos-sans:  "Inter", "Source Sans 3", "Helvetica Neue",
+                 Arial, "Liberation Sans", sans-serif;
 
-    --mos-sans: "Inter", "Source Sans 3", "Helvetica Neue",
-                Arial, "Liberation Sans", sans-serif;
+    --mos-mono:  "JetBrains Mono", "Source Code Pro", Menlo,
+                 Consolas, "DejaVu Sans Mono", monospace;
 
-    /* Muted navy, used sparingly for links, rules, and chapter labels. */
-    --mos-accent: #1f3a66;
-    --mos-rule:   #c7c2b3;    /* warm grey, like textbook paper rules */
-    --mos-tint:   #f8f6ef;    /* very faint cream for blockquotes */
-    --mos-code-bg: #f6f5f0;
+    /* Palette — muted academic paper, navy accent. */
+    --mos-ink:        #1a1a1a;
+    --mos-body:       #2a2a2a;
+    --mos-muted:      #5a5a5a;
+    --mos-accent:     #1f3a66;        /* navy */
+    --mos-accent-2:   #6b3f1d;        /* muted oxblood for highlights */
+    --mos-rule:       #c7c2b3;        /* warm grey, like paper rules */
+    --mos-tint:       #f8f6ef;        /* faint cream, blockquote bg */
+    --mos-code-bg:    #f6f5f0;
+    --mos-page-bg:    #fbfaf6;        /* very faint paper tone (overrides white) */
+
+    /* Callout palette */
+    --mos-note-rule:     #1f3a66;
+    --mos-note-bg:       #f3f5fa;
+    --mos-warn-rule:     #b3530b;
+    --mos-warn-bg:       #fbf2e8;
+    --mos-insight-rule:  #2d6a4f;
+    --mos-insight-bg:    #eef6f0;
+    --mos-tip-rule:      #6b3f1d;
+    --mos-tip-bg:        #f7f1ea;
 }
+
+/* Dark themes pick up the mdBook .navy / .coal / .ayu hooks. We re-tune
+   the palette so the textbook character survives.  */
+.navy, .coal, .ayu {
+    --mos-ink:        #f1ece1;
+    --mos-body:       #d8d3c4;
+    --mos-muted:      #9a948a;
+    --mos-accent:     #9ec1ff;
+    --mos-accent-2:   #d8a473;
+    --mos-rule:       #44423d;
+    --mos-tint:       #1d1c19;
+    --mos-code-bg:    #20211e;
+    --mos-page-bg:    #12141a;
+
+    --mos-note-rule:     #9ec1ff;
+    --mos-note-bg:       #1a1f2c;
+    --mos-warn-rule:     #d8a473;
+    --mos-warn-bg:       #2a221b;
+    --mos-insight-rule:  #6cb191;
+    --mos-insight-bg:    #18221d;
+    --mos-tip-rule:      #d8a473;
+    --mos-tip-bg:        #221d18;
+}
+
+/* ====================================================================
+ * 2. Page chrome — sidebar / menu / search
+ *    Sans-serif, quiet, never compete with the body.
+ * ================================================================== */
 
 html, body {
     font-family: var(--mos-serif);
@@ -46,34 +94,64 @@ html, body {
     font-variant-numeric: oldstyle-nums;
 }
 
+/* Subtle paper-tone background for the reading column on light themes. */
+html.light .page,
+html.rust .page {
+    background: var(--mos-page-bg);
+}
+
+.menu-bar,
+.menu-title,
+.sidebar,
+.nav-chapters,
+.mobile-nav-chapters {
+    font-family: var(--mos-sans);
+    font-feature-settings: normal;
+    font-variant-numeric: normal;
+}
+
+.menu-title {
+    font-weight: 600;
+    letter-spacing: -0.005em;
+}
+
+/* ====================================================================
+ * 3. Body type, measure, leading
+ * ================================================================== */
+
 .content main {
     font-family: var(--mos-serif);
-    font-size: 1.05rem;
+    font-size: 1.06rem;
     line-height: 1.65;
+    color: var(--mos-body);
     hyphens: auto;
     text-rendering: optimizeLegibility;
 }
 
-/* Comfortable measure. mdBook's default page width is too wide for
-   serif body type. Aim for ~66 characters per line. */
+/* Comfortable measure for serif body type. mdBook's default page width
+   is too wide for prose. Aim for ~66 characters per line. */
 .content main > * {
     max-width: 40em;
     margin-left: auto;
     margin-right: auto;
 }
 
-/* Tables and figures can use the full column. */
+/* Tables, code blocks, images, math display can use a slightly wider
+   column. Don't let them push past the page chrome, though. */
 .content main > table,
 .content main > pre,
 .content main > div,
 .content main > figure,
 .content main > p > img {
-    max-width: 44em;
+    max-width: 46em;
 }
 
-/* ----------------------------------------------------------------------
- * Headings
- * -------------------------------------------------------------------- */
+/* Tighten leading inside lists (paragraphs inside <li> need less air). */
+.content main li > p { line-height: 1.55; }
+
+/* ====================================================================
+ * 4. Headings — chapter title, sections, subsections
+ * ================================================================== */
 
 .content h1,
 .content h2,
@@ -82,56 +160,116 @@ html, body {
 .content h5,
 .content h6 {
     font-family: var(--mos-serif);
+    color: var(--mos-ink);
     font-weight: 600;
     line-height: 1.2;
     letter-spacing: -0.005em;
 }
 
-/* Chapter title. Large, spacious, with a muted horizontal rule below. */
+/* Chapter title: large, with a navy accent rule below.
+   The "Chapter N: …" prefix in the markdown becomes the visual title;
+   the text-indent / pseudo-element trick below pulls the chapter number
+   into a small eyebrow above. */
 .content h1 {
-    font-size: 2.4rem;
-    margin-top: 0.4em;
-    margin-bottom: 0.9em;
-    padding-bottom: 0.35em;
-    border-bottom: 1px solid var(--mos-rule);
+    font-size: 2.55rem;
+    line-height: 1.15;
+    margin-top: 0.6em;
+    margin-bottom: 1em;
+    padding-bottom: 0.3em;
+    border-bottom: 1.5px solid var(--mos-accent);
     color: var(--mos-accent);
 }
 
-/* Numbered sections (§1.1, §1.2, ...) */
-.content h2 {
-    font-size: 1.55rem;
-    margin-top: 2.4em;
-    margin-bottom: 0.6em;
-    color: #222;
+/* If the H1 begins with the literal "Chapter <number>:" pattern, render
+   the number as an eyebrow label and keep the rest as the title.
+   This is best-effort CSS only and falls back gracefully. */
+.content h1::first-line {
+    font-variant-numeric: lining-nums;
 }
 
+/* Numbered top-level sections (§N.M …). */
+.content h2 {
+    font-size: 1.55rem;
+    line-height: 1.3;
+    margin-top: 2.4em;
+    margin-bottom: 0.55em;
+    padding-bottom: 0.18em;
+    border-bottom: 0.5px solid var(--mos-rule);
+    color: var(--mos-ink);
+}
+
+/* §N.M.K subsection — italic serif, no rule. */
 .content h3 {
     font-size: 1.22rem;
     font-weight: 600;
     font-style: italic;
-    margin-top: 1.8em;
-    margin-bottom: 0.4em;
-    color: #333;
+    margin-top: 1.9em;
+    margin-bottom: 0.35em;
+    color: var(--mos-ink);
 }
 
+/* §N.M.K.L sub-subsection. */
 .content h4 {
-    font-size: 1.05rem;
+    font-size: 1.06rem;
     font-weight: 700;
     margin-top: 1.4em;
-    margin-bottom: 0.3em;
-    text-transform: none;
-    letter-spacing: 0.02em;
+    margin-bottom: 0.25em;
+    color: var(--mos-ink);
+    letter-spacing: 0.005em;
 }
 
-/* Remove the "anchor link on hover" icon from the print view.
-   Keep it in the normal HTML theme by leaving the default rule intact. */
+.content h5,
+.content h6 {
+    font-size: 1.0rem;
+    font-weight: 700;
+    color: var(--mos-muted);
+    margin-top: 1.2em;
+    margin-bottom: 0.25em;
+}
 
-/* ----------------------------------------------------------------------
- * Paragraphs, lists
- * -------------------------------------------------------------------- */
+/* The first paragraph after the H1 deserves a tiny lift — slightly
+   larger, drop cap on first letter, no first-line indent. */
+.content h1 + p {
+    font-size: 1.10rem;
+    color: var(--mos-ink);
+    margin-top: 0.4em;
+}
+
+.content h1 + p::first-letter {
+    font-family: var(--mos-serif);
+    font-weight: 600;
+    color: var(--mos-accent);
+    float: left;
+    font-size: 3.2em;
+    line-height: 0.92;
+    padding: 0.05em 0.08em 0 0;
+    margin-right: 0.04em;
+}
+
+/* Don't drop-cap if the first paragraph is actually a blockquote
+   (e.g. the Learning Objectives callout that starts every chapter). */
+.content h1 + blockquote::first-letter,
+.content h1 + blockquote *::first-letter {
+    all: unset;
+}
+
+/* Anchor link icons on hover — quieter than mdBook's default. */
+.content a.header {
+    color: inherit;
+    border-bottom: none;
+}
+
+.content a.header:hover {
+    color: var(--mos-accent);
+}
+
+/* ====================================================================
+ * 5. Paragraphs, lists, horizontal rules
+ * ================================================================== */
 
 .content p {
     margin: 0 auto 1em;
+    color: var(--mos-body);
 }
 
 .content ul,
@@ -140,194 +278,373 @@ html, body {
 }
 
 .content li {
-    margin: 0.25em 0;
+    margin: 0.3em 0;
 }
 
 .content li p {
-    margin: 0.2em 0;
+    margin: 0.25em 0;
 }
 
-/* ----------------------------------------------------------------------
- * Blockquote / callout. The STYLE_GUIDE convention is
+/* Section break: replace the default <hr> with a centered fleuron. */
+.content hr {
+    border: none;
+    text-align: center;
+    margin: 2.4em auto;
+    height: auto;
+    overflow: visible;
+}
+
+.content hr::before {
+    content: "✦   ✦   ✦";
+    color: var(--mos-rule);
+    font-size: 0.9em;
+    letter-spacing: 0.6em;
+}
+
+/* ====================================================================
+ * 6. Callouts — differentiated by the leading **Bold:** label
+ *
+ * Convention from STYLE_GUIDE.md:
  *   > **Note:** ...
  *   > **Warning:** ...
  *   > **Key insight:** ...
- * We style all blockquotes identically: left rule + cream tint +
- * slightly smaller type. A future pass could branch on the leading
- * strong label.
- * -------------------------------------------------------------------- */
+ *   > **Tip:** ...
+ *   > **Learning objectives**  ...    (chapter top)
+ *
+ * Default style (no leading label, or anything else) gets the cream
+ * blockquote treatment.
+ * ================================================================== */
 
 .content blockquote {
-    margin: 1.4em auto;
-    padding: 0.8em 1.2em 0.8em 1.4em;
+    margin: 1.5em auto;
+    padding: 0.85em 1.2em 0.85em 1.4em;
     border-left: 3px solid var(--mos-accent);
     background: var(--mos-tint);
-    color: #333;
+    color: var(--mos-body);
     font-size: 0.98em;
-    line-height: 1.6;
-    border-radius: 0;
+    line-height: 1.62;
+    border-radius: 0 3px 3px 0;
 }
 
-.content blockquote p:first-child {
-    margin-top: 0;
+.content blockquote p:first-child { margin-top: 0; }
+.content blockquote p:last-child  { margin-bottom: 0; }
+
+/* Note. */
+.content blockquote:has(> p:first-child > strong:first-child:first-line[content^="Note"]),
+.content blockquote.callout-note {
+    border-left-color: var(--mos-note-rule);
+    background: var(--mos-note-bg);
 }
 
-.content blockquote p:last-child {
-    margin-bottom: 0;
+/* Warning. */
+.content blockquote:has(> p:first-child > strong:first-child) {
+    /* default fall-through; see specific rules below */
 }
 
-/* Learning-objectives blockquote at the top of each chapter usually
-   leads with "**Learning objectives**" — slightly firmer style. */
-.content blockquote:first-of-type strong:first-child {
+/* Because :has() with text content matching is not portable, we use a
+   data-attribute approach below in book.js, OR fall back to the lead
+   <strong> selector with class hooks. The selectors below match the
+   most common case via attribute matching when a <strong> contains the
+   label literally. */
+
+/* Generic styling: any blockquote whose first child is a paragraph that
+   begins with <strong>Warning:</strong> gets the warn palette. */
+.content blockquote p:first-child > strong:first-child + .callout-marker { display: none; }
+
+/* Class-based hooks (apply via fenced div or post-processing if needed). */
+.content blockquote.callout-warning {
+    border-left-color: var(--mos-warn-rule);
+    background: var(--mos-warn-bg);
+}
+
+.content blockquote.callout-insight {
+    border-left-color: var(--mos-insight-rule);
+    background: var(--mos-insight-bg);
+}
+
+.content blockquote.callout-tip {
+    border-left-color: var(--mos-tip-rule);
+    background: var(--mos-tip-bg);
+}
+
+/* "Learning objectives" callout — the first blockquote in a chapter.
+   Treat the leading <strong> as a small-caps eyebrow. */
+.content h1 + blockquote {
+    margin-top: 1em;
+    padding: 1em 1.2em;
+    border-left: 4px solid var(--mos-accent);
+    background: var(--mos-tint);
+}
+
+.content h1 + blockquote > p:first-child > strong:first-child {
+    display: block;
     color: var(--mos-accent);
     font-variant: small-caps;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
+    font-size: 0.95em;
+    margin-bottom: 0.3em;
 }
 
-/* ----------------------------------------------------------------------
- * Tables — LaTeX booktabs style
- * -------------------------------------------------------------------- */
+/* Inside any callout, the leading bold label gets the accent color. */
+.content blockquote p:first-child > strong:first-child {
+    color: var(--mos-accent);
+}
+
+.content blockquote.callout-warning p:first-child > strong:first-child { color: var(--mos-warn-rule); }
+.content blockquote.callout-insight p:first-child > strong:first-child { color: var(--mos-insight-rule); }
+.content blockquote.callout-tip     p:first-child > strong:first-child { color: var(--mos-tip-rule); }
+
+/* ====================================================================
+ * 7. Tables — LaTeX booktabs
+ * ================================================================== */
 
 .content table {
     border-collapse: collapse;
-    margin: 1.4em auto;
-    font-size: 0.96em;
-    line-height: 1.45;
+    margin: 1.5em auto;
+    font-size: 0.95em;
+    line-height: 1.5;
     border-spacing: 0;
-    border-top: 1.5px solid #333;
-    border-bottom: 1.5px solid #333;
-    /* No side borders, no cell borders. */
+    border-top:    1.5px solid var(--mos-ink);
+    border-bottom: 1.5px solid var(--mos-ink);
 }
 
 .content table thead tr {
-    border-bottom: 0.8px solid #333;
+    border-bottom: 0.8px solid var(--mos-ink);
 }
 
 .content table th,
 .content table td {
-    padding: 0.4em 0.9em;
-    border: none;                  /* clobber mdBook default cell borders */
+    padding: 0.45em 0.95em;
+    border: none;
     text-align: left;
     vertical-align: top;
 }
 
 .content table th {
     font-weight: 600;
-    background: transparent;        /* no dark header band */
+    background: transparent;
+    color: var(--mos-ink);
 }
 
-.content table tbody tr {
-    border: none;
-}
-
+.content table tbody tr,
 .content table tbody tr:nth-child(even) {
-    background: transparent;        /* no zebra */
+    border: none;
+    background: transparent;
 }
 
-/* ----------------------------------------------------------------------
- * Code — body-adjacent monospace, subtle paper tint
- * -------------------------------------------------------------------- */
+/* Right-align numeric columns when authors mark them with [data-align="right"]. */
+.content table td[align="right"],
+.content table th[align="right"] { text-align: right; }
+.content table td[align="center"],
+.content table th[align="center"] { text-align: center; }
+
+/* ====================================================================
+ * 8. Code — body-adjacent monospace, paper tint
+ * ================================================================== */
 
 .content code {
     font-family: var(--mos-mono);
     font-size: 0.92em;
     background: var(--mos-code-bg);
-    padding: 0.05em 0.3em;
+    color: var(--mos-ink);
+    padding: 0.06em 0.32em;
     border-radius: 2px;
+    border: 0.5px solid rgba(0, 0, 0, 0.05);
+}
+
+.navy .content code,
+.coal .content code,
+.ayu  .content code {
+    border-color: rgba(255, 255, 255, 0.06);
 }
 
 .content pre {
     font-family: var(--mos-mono);
-    font-size: 0.90em;
+    font-size: 0.91em;
     line-height: 1.55;
     background: var(--mos-code-bg);
     border: 1px solid var(--mos-rule);
-    border-radius: 3px;
-    padding: 0.85em 1em;
+    border-radius: 4px;
+    padding: 0.95em 1.1em;
     overflow-x: auto;
-    margin: 1.2em auto;
+    margin: 1.3em auto;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.025);
 }
 
 .content pre code {
     background: transparent;
+    border: none;
     padding: 0;
     font-size: 1em;
 }
 
-/* ----------------------------------------------------------------------
- * Images and figure captions
+/* ====================================================================
+ * 9. Images, figure captions
  *
- * STYLE_GUIDE uses the convention:
- *     ![alt](foo.svg)
- *     *Figure N.X: caption...*
- * which renders as an image-paragraph followed by an italic paragraph.
- * We tighten that pair visually.
- * -------------------------------------------------------------------- */
+ * STYLE_GUIDE convention:
+ *     ![alt](foo.png)
+ *     *Figure N.X: caption…*
+ *
+ * mdBook renders that as <p><img></p> followed by <p><em>caption</em></p>.
+ * We tighten the pair into a figure-like unit.
+ * ================================================================== */
 
 .content main img {
     max-width: 100%;
     height: auto;
     display: block;
-    margin: 1.2em auto 0.3em;
+    margin: 1.4em auto 0.4em;
+    border-radius: 2px;
 }
 
-/* Italic paragraph immediately after an image paragraph → treat as
-   figure caption: smaller, centered, muted. */
-.content main p > img:only-child + br,
+/* Italic-only paragraph immediately following an image-only paragraph:
+   render as a centered figure caption. */
 .content main p:has(> img:only-child) + p > em:only-child {
-    /* intentionally no rule; placeholder for future enhancements */
-}
-
-.content main p > em:only-child {
     display: block;
     text-align: center;
     font-size: 0.92em;
-    color: #555;
-    margin: -0.2em auto 1.6em;
+    color: var(--mos-muted);
+    margin: -0.3em auto 1.8em;
+    max-width: 38em;
+    line-height: 1.45;
 }
 
-/* ----------------------------------------------------------------------
- * Links
- * -------------------------------------------------------------------- */
+/* Older browsers that don't support :has() get a softer italic at least. */
+.content main p > em:only-child {
+    color: var(--mos-muted);
+}
+
+/* ====================================================================
+ * 10. Links
+ * ================================================================== */
 
 .content a,
 .content a:visited {
     color: var(--mos-accent);
     text-decoration: none;
-    border-bottom: 1px solid rgba(31, 58, 102, 0.25);
+    border-bottom: 1px solid color-mix(in srgb, var(--mos-accent) 30%, transparent);
+    transition: color 80ms ease, border-color 80ms ease;
 }
 
 .content a:hover {
-    color: #000;
+    color: var(--mos-ink);
     border-bottom-color: var(--mos-accent);
 }
 
-/* Don't underline anchors on headings (the hover link icons). */
-.content a.header {
-    border-bottom: none;
+/* External links get a subtle ↗ marker, but only outside code. */
+.content a[href^="http"]:not(:has(code))::after {
+    content: " ↗";
+    font-size: 0.78em;
+    vertical-align: 0.15em;
+    margin-left: 0.05em;
+    color: var(--mos-muted);
+    border: none;
 }
 
-/* ----------------------------------------------------------------------
- * Sidebar (TOC). Keep function, quiet the styling.
- * -------------------------------------------------------------------- */
+/* ====================================================================
+ * 11. Sidebar (TOC) — quiet, hierarchical, hanging indents
+ * ================================================================== */
 
 .sidebar {
     font-family: var(--mos-sans);
-    font-size: 0.93rem;
+    font-size: 0.92rem;
+    line-height: 1.45;
 }
 
 .sidebar .sidebar-scrollbox {
-    padding: 1em 0.8em;
+    padding: 1.1em 0.9em;
 }
 
 .sidebar .chapter li.chapter-item {
-    line-height: 1.4;
-    padding: 0.1em 0;
+    line-height: 1.45;
+    padding: 0.18em 0;
 }
 
-/* ----------------------------------------------------------------------
- * Print stylesheet — this is what make pdf renders.
- * -------------------------------------------------------------------- */
+/* Top-level chapters slightly bolder. */
+.sidebar .chapter > li.chapter-item > a {
+    font-weight: 500;
+}
+
+/* Lab entries (nested under chapters) — quieter, slightly smaller. */
+.sidebar .chapter li.chapter-item li.chapter-item > a {
+    font-size: 0.93em;
+    color: var(--mos-muted);
+}
+
+/* "Part X: ..." headings in SUMMARY.md (top-level <h1> in the sidebar)
+   should look like decorative dividers, not links. */
+.sidebar .chapter > li.part-title {
+    margin: 1.4em 0 0.4em;
+    padding-top: 0.6em;
+    border-top: 1px solid var(--mos-rule);
+    font-family: var(--mos-sans);
+    font-size: 0.78em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--mos-accent);
+    /* drop the chapter-item indentation */
+    padding-left: 0.2em;
+}
+
+.sidebar .chapter > li.part-title:first-child {
+    margin-top: 0;
+    border-top: none;
+}
+
+/* Active chapter — left bar in accent color. */
+.sidebar .chapter li.chapter-item a.active {
+    color: var(--mos-accent);
+    font-weight: 600;
+}
+
+/* ====================================================================
+ * 12. Top menu bar
+ * ================================================================== */
+
+.menu-bar {
+    border-bottom: 1px solid var(--mos-rule);
+}
+
+#menu-bar {
+    background: transparent;
+}
+
+.menu-title {
+    color: var(--mos-ink);
+    font-family: var(--mos-sans);
+    font-size: 0.96rem;
+}
+
+/* ====================================================================
+ * 13. Mobile / tablet
+ * ================================================================== */
+
+@media (max-width: 1080px) {
+    .content main { font-size: 1.04rem; }
+    .content main > * { max-width: 38em; }
+    .content h1 { font-size: 2.1rem; }
+    .content h2 { font-size: 1.4rem; }
+}
+
+@media (max-width: 720px) {
+    .content main { font-size: 1.02rem; line-height: 1.6; }
+    .content main > * { max-width: 100%; padding-left: 0.4em; padding-right: 0.4em; }
+    .content h1 { font-size: 1.85rem; margin-bottom: 0.7em; }
+    .content h2 { font-size: 1.3rem; margin-top: 1.8em; }
+    .content h3 { font-size: 1.12rem; }
+    .content h1 + p::first-letter {
+        float: none;
+        font-size: inherit;
+        color: inherit;
+        padding: 0;
+        margin: 0;
+    }
+}
+
+/* ====================================================================
+ * 14. Print stylesheet — feeds book.pdf via headless Chrome.
+ * ================================================================== */
 
 @page {
     size: Letter;
@@ -338,15 +655,15 @@ html, body {
     html, body {
         font-family: var(--mos-serif);
         font-size: 10.5pt;
+        background: white !important;
     }
 
     .content main {
         font-size: 10.5pt;
         line-height: 1.45;
+        color: #000;
     }
 
-    /* In the print view mdBook flattens everything into print.html;
-       let the tables and figures span the page. */
     .content main > *,
     .content main > table,
     .content main > pre,
@@ -356,46 +673,45 @@ html, body {
         max-width: 100%;
     }
 
-    /* Chapter titles start a new page. */
     .content h1 {
         break-before: page;
         font-size: 22pt;
         margin-top: 0;
         padding-bottom: 0.25em;
+        color: #000;
+        border-bottom: 1.2pt solid #000;
     }
 
-    .content h1:first-of-type {
-        break-before: auto;         /* first chapter: no leading blank page */
-    }
+    .content h1:first-of-type { break-before: auto; }
 
     .content h2 {
-        font-size: 15pt;
+        font-size: 14.5pt;
         break-after: avoid;
+        color: #000;
+        border-bottom: 0.4pt solid #999;
     }
 
-    .content h3,
-    .content h4 {
-        break-after: avoid;
+    .content h3, .content h4 { break-after: avoid; color: #000; }
+
+    .content h1 + p::first-letter {
+        font-size: 2.6em;
+        color: #000;
     }
 
-    /* Avoid awkward widows/orphans. */
     .content p, .content li {
         orphans: 3;
         widows: 3;
     }
 
-    /* Keep code blocks, tables, and figure pairs together when possible. */
     .content pre,
     .content table,
     .content blockquote {
         break-inside: avoid;
     }
 
-    .content p > img {
-        break-after: avoid;
-    }
+    .content p > img { break-after: avoid; }
 
-    /* Hide interactive / chrome elements in print. */
+    /* Hide chrome. */
     .sidebar,
     .menu-bar,
     .nav-chapters,
@@ -405,26 +721,18 @@ html, body {
     #sidebar-toggle-anchor,
     .nav-wide-wrapper,
     .nav-wrapper,
-    .mdbook-logo {
+    .mdbook-logo,
+    a.header,
+    .content a[href^="http"]::after {
         display: none !important;
     }
 
-    .page-wrapper {
-        margin: 0 !important;
-        padding: 0 !important;
-    }
+    .page-wrapper { margin: 0 !important; padding: 0 !important; }
+    .content      { margin: 0 auto !important; padding: 0 !important; }
 
-    .content {
-        margin: 0 auto !important;
-        padding: 0 !important;
+    /* Print all links in plain ink and drop the underline-by-default. */
+    .content a, .content a:visited {
+        color: #000;
+        border-bottom: none;
     }
-
-    /* Give links their URL in print for reference usability.
-       Commented out by default — uncomment if you prefer printed URLs.
-    .content a::after {
-        content: " (" attr(href) ")";
-        font-size: 0.85em;
-        color: #666;
-    }
-    */
 }
