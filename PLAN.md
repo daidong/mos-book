@@ -28,7 +28,7 @@ University of Delaware (`/Users/daidong/Documents/rp-writings/OS-CISC663`).
 | Book Chapter | Source Week(s) | Topic | Lab |
 |---|---|---|---|
 | Ch 1 | Week 0 + Week 1 | Introduction — OS in the Cloud-Native and AI Era | Environment Setup (Lab 0) |
-| Ch 2 | Week 2A | Performance Measurement Methodology | Quicksort Performance Analysis (Lab 1) |
+| Ch 2 | Week 2A | Performance Measurement Methodology — Memory, Translation, and Evidence | Quicksort Performance Analysis (Lab 1) |
 | Ch 3 | Week 2B | Tail Latency and Systematic Debugging | PagerUSE Oncall Simulation (Lab 2) |
 | Ch 4 | Week 3 | Processes, Threads, and Concurrency | Scheduling Latency Under Contention (Lab 3) |
 | Ch 5 | Week 4 | Linux Scheduler Internals and Observability | SchedLab — eBPF Tracing (Lab 4) |

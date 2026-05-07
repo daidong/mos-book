@@ -1,5 +1,5 @@
 /*
- * Lab 1: Quicksort Performance Analysis
+ * Chapter 2 Lab: Quicksort Performance Analysis
  * main.c - Driver program
  * 
  * Usage: ./qs <input_file>

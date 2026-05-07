@@ -1,5 +1,5 @@
 /*
- * Lab 1: Quicksort Performance Analysis
+ * Chapter 2 Lab: Quicksort Performance Analysis
  * quicksort.c - starter quicksort implementation
  */
 

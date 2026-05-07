@@ -1,4 +1,4 @@
-# Lab 1: Quicksort Performance Analysis
+# Chapter 2 Lab: Quicksort Performance Analysis
 
 This directory contains the starter code for the Chapter 2 lab.
 
