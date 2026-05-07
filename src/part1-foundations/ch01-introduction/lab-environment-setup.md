@@ -180,7 +180,10 @@ Fill in this table:
 | 2 |  |  |  |  |  |  |
 | 3 |  |  |  |  |  |  |
 
-Compute `IPC = instructions / cycles`.
+Compute `IPC = instructions / cycles`. If your VM cannot expose hardware
+counters such as `cycles` or `instructions`, keep the raw error message,
+rerun with the software events `task-clock,context-switches,page-faults`,
+and explain why IPC could not be computed in this environment.
 
 ### B.5 Interpret the Result
 
@@ -198,14 +201,17 @@ libraries produced the faults" is a mechanism.
 
 ### B.6 Evidence Table
 
-Add this table to your report.
+Add an evidence table to your report. The first row below is an example;
+complete at least two additional rows using your own run.
 
 | Claim | Signal 1 | Signal 2 | Alternative ruled out |
 |---|---|---|---|
 | `printf()` crosses into the kernel through `write()` | `strace` line | program output behavior | direct user-space device access |
-| first-run cost includes page setup | `page-faults` counter | trace shows mapping activity | "the program allocates a large heap" |
+| your claim about page faults | raw counter or trace line | supporting observation | plausible wrong explanation |
+| your claim about counter stability or noise | raw counter value | repeated-run comparison | plausible wrong explanation |
 
-You may revise the wording, but keep the structure.
+You may revise the wording, but keep the structure and use evidence from
+your own artifacts.
 
 ### B.7 Part B Checklist
 
@@ -220,7 +226,9 @@ You may revise the wording, but keep the structure.
 
 ### C.1 Build a Small Ping-Pong Program
 
-Create `ctx_switch_test.c`:
+Create `ctx_switch_test.c`. This version uses two pipes so each iteration
+forces a request-response handoff between parent and child. A one-way pipe
+can buffer many bytes and may not create the scheduler activity you expect.
 
 ```c
 #include <stdio.h>
@@ -230,23 +238,32 @@ Create `ctx_switch_test.c`:
 
 int main(int argc, char *argv[]) {
     int n = (argc > 1) ? atoi(argv[1]) : 1000;
-    int pipefd[2];
-    if (pipe(pipefd) < 0) return 1;
+    int p2c[2], c2p[2];
+    char buf = 'x';
+
+    if (pipe(p2c) < 0 || pipe(c2p) < 0) return 1;
 
     pid_t pid = fork();
     if (pid < 0) return 1;
 
     if (pid == 0) {
-        close(pipefd[1]);
-        char buf;
-        for (int i = 0; i < n; i++) read(pipefd[0], &buf, 1);
+        close(p2c[1]);
+        close(c2p[0]);
+        for (int i = 0; i < n; i++) {
+            if (read(p2c[0], &buf, 1) != 1) _exit(1);
+            if (write(c2p[1], &buf, 1) != 1) _exit(1);
+        }
         _exit(0);
     }
 
-    close(pipefd[0]);
-    char buf = 'x';
-    for (int i = 0; i < n; i++) write(pipefd[1], &buf, 1);
-    close(pipefd[1]);
+    close(p2c[0]);
+    close(c2p[1]);
+    for (int i = 0; i < n; i++) {
+        if (write(p2c[1], &buf, 1) != 1) return 1;
+        if (read(c2p[0], &buf, 1) != 1) return 1;
+    }
+    close(p2c[1]);
+    close(c2p[0]);
     wait(NULL);
     return 0;
 }
@@ -261,8 +278,8 @@ sudo perf stat -e context-switches,cpu-migrations ./ctx_switch_test 1000
 sudo perf stat -e context-switches,cpu-migrations ./ctx_switch_test 10000
 ```
 
-Record the scaling and explain why pipe-based handoff produces scheduler
-activity that the `hello` program did not.
+Record the scaling and explain why two-process pipe handoff produces
+blocking, wakeup, and scheduler activity that the `hello` program did not.
 
 ### C.2 Part C Checklist
 

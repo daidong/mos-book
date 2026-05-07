@@ -9,47 +9,66 @@
 > - Map a modern systems symptom to the relevant user-space, kernel, and hardware mechanisms
 > - Run a first trace and a first measurement, then explain what each observation means
 
-## 1.1 Why Operating Systems Still Matter
+## 1.1 Why do OS mechanisms still explain cloud symptoms?
+
+At 2:13 p.m., a service dashboard reports that a checkout pod is healthy.
+CPU usage is below its request, memory is below its limit, and the
+container has not restarted. Yet p99 latency has jumped from 8 ms to
+180 ms. The platform view says the pod is running. The OS view asks a
+more useful question: where did the request wait?
+
+That wait might be in the runqueue, where a **runnable** task is ready to
+execute but not yet scheduled. It might be in **page reclaim**, where the
+kernel tries to free memory under pressure. It might be in blocking I/O, a
+socket queue, or a contended lock. At scale, rare component-level delays
+become visible user-facing tail delays because one request often depends on
+many components (Dean & Barroso, 2013). A modern incident usually arrives
+with platform vocabulary, but the explanation still lives in mechanisms.
 
 The vocabulary has changed faster than the mechanisms. Engineers now say
 "the pod was throttled," "the inference server p99 regressed," or "the
-agent runtime blocked a tool call." Those sound like platform-level
-problems. Usually they are OS problems with newer names.
+agent runtime blocked a tool call." Here **p99** means the 99th-percentile
+latency: 99% of requests finished no slower than this value, and the
+remaining 1% took longer. A pod that is **OOM-killed** has crossed a memory
+limit and was terminated by the kernel's out-of-memory path. An agent
+runtime that decides whether a tool call may touch the filesystem is
+solving an old protection problem: which subject may perform which operation
+on which object, and who mediates that decision (Saltzer & Schroeder, 1975).
 
-A pod that is OOM-killed is still a memory-accounting failure. A service
-whose p99 jumps from 5 ms to 200 ms is still waiting on a slow path:
-runqueue delay, page reclaim, blocking I/O, or lock contention. An agent
-runtime that decides whether a tool call may touch the filesystem is still
-enforcing a privilege boundary. Kubernetes, container runtimes, service
-meshes, and agent frameworks add policy, automation, and better control
-surfaces. They do not repeal scheduling, virtual memory, protection, or
-I/O.
+Kubernetes, container runtimes, service meshes, and agent frameworks add
+policy, automation, and better control surfaces. They do not repeal
+scheduling, virtual memory, protection, or I/O. This book treats modern
+systems as layered compositions of older mechanisms rather than as entirely
+new abstractions. If a deployment engineer says "Kubernetes throttled my
+workload," we will translate that into the underlying resource-control
+event. If an incident report says "tail latency increased under traffic
+burst," we will ask what queue formed, where it formed, and which resource
+boundary it crossed.
 
-That is the premise of this book. We will treat modern systems as layered
-compositions of older mechanisms rather than as entirely new abstractions.
-If a deployment engineer says "Kubernetes throttled my workload," we will
-translate that into the underlying resource-control event. If an incident
-report says "tail latency increased under traffic burst," we will ask what
-queue formed, where it formed, and which resource boundary it crossed.
+> **Key insight:** Modern platforms give OS mechanisms new names and new
+> control surfaces; they do not replace them. If you cannot explain the
+> kernel- and hardware-level cause, you do not yet understand the production
+> symptom.
 
-> **Key insight:** Modern platforms rename OS mechanisms; they do not
-> replace them. If you cannot explain the kernel- and hardware-level cause,
-> you do not yet understand the production symptom.
-
-## 1.2 What Counts as "the OS" Now?
+## 1.2 Where is the OS boundary in a modern stack?
 
 A classical textbook often draws a simple picture: application → system
 call interface → kernel → hardware. That picture is still correct, but it
 is no longer sufficient for real deployments. Most production systems add
-at least two more layers above the kernel: execution runtimes and a control
-plane. Figure 1.1 makes the boundary map explicit.
+at least two more layers above the kernel: an **execution runtime** and a
+**control plane**. Large cluster managers such as Borg and Kubernetes use
+that control plane to place work, enforce policy, and reconcile desired
+state with observed state across many machines (Verma et al., 2015; Burns
+et al., 2016). Figure 1.1 makes the boundary map explicit.
 
 ![Layered stack showing control plane, user-space runtimes, kernel, and hardware, with example responsibilities at each layer](figures/modern-os-stack.svg)
 *Figure 1.1: A modern systems stack still reduces to a layered resource-management path. The important question is not which layer is “the real OS,” but which layer owns the decision and which layer pays the execution cost.*
 
 The useful question is not "which layer is the real OS?" The useful
 question is "which layer owns which decision?" The answer is usually more
-specific than students expect.
+specific than students expect. The table uses **cgroup**, or control group,
+for the Linux kernel mechanism that groups processes so their resource use
+can be limited, accounted, and observed through a filesystem interface.
 
 | Production term | OS-level analogue | Where to observe it first | Typical failure mode |
 |---|---|---|---|
@@ -59,17 +78,23 @@ specific than students expect.
 | agent tool call sandbox | `execve()` + credentials + filesystem policy | audit log, syscall trace, policy file | denied capability or path access |
 | autoscaler miss | control loop acting on delayed signals | metrics pipeline + controller logs | stale measurements, slow convergence |
 
-Two habits follow from this table.
+A Kubernetes CPU limit is policy. The mechanism is cgroup enforcement in
+the kernel. A language runtime chooses when to allocate memory; the kernel
+decides when virtual pages become physical pages and what happens under
+pressure.
 
-First, always separate policy from mechanism. A Kubernetes resource limit
-is policy. The mechanism is cgroup enforcement in the kernel. A language
-runtime chooses when to allocate memory; the kernel decides when virtual
-pages become physical pages and what happens under pressure.
+For example, if a pod reports CPU throttling, do not stop at `kubectl top`.
+Find the pod's cgroup and read `cpu.stat`. If `nr_throttled` and
+`throttled_usec` rise while request latency rises, the platform symptom now
+has a kernel-level enforcement signal. The next question is whether the
+limit is too low, the workload is bursty, or the measurement window hides
+short quota exhaustion.
 
-Second, always ask where the boundary is crossed. If the phenomenon is a
-branch misprediction, the hardware owns it. If it is a page fault, the MMU
-and kernel cooperate on it. If it is a container limit, the kernel enforces
-it even if the user first notices it through `kubectl`.
+Two habits follow from this table. First, separate policy from mechanism.
+Second, ask where the boundary is crossed. If the phenomenon is a branch
+misprediction, the hardware owns it. If it is a page fault, the MMU and
+kernel cooperate on it. If it is a container limit, the kernel enforces it
+even if the user first notices it through `kubectl`.
 
 > **Note:** This book uses the full-stack meaning of "operating system":
 > not just the kernel binary, but the resource-management path from
@@ -77,7 +102,7 @@ it even if the user first notices it through `kubectl`.
 > That broader view is useful precisely because it still reduces to a small
 > number of mechanisms.
 
-## 1.3 Three Core Skills: Understand, Measure, Explain
+## 1.3 What habits does this book train?
 
 Every chapter in this book trains the same three skills, in the same order.
 The order matters.
@@ -111,10 +136,12 @@ A compact way to think about the book is this:
 If a chapter is readable but cannot answer those four questions, it is not
 good enough for this book.
 
-## 1.4 What Actually Happens When You Run a Program?
+## 1.4 What happens when a shell starts a program?
 
-A foundations chapter should not stay rhetorical for long, so let us walk
-through the most basic event in the subject: starting a program.
+The opening sections give us a vocabulary. Now we need an artifact. The
+smallest useful artifact is a shell starting a program, because that single
+event crosses the user-space, kernel, and hardware boundaries that the rest
+of the book will keep revisiting.
 
 Consider a shell launching this program:
 
@@ -166,39 +193,26 @@ This small trace already exposes the major boundaries of the subject.
 ![Swimlane diagram showing shell launch, fork or clone, execve, loader activity, write system call, and terminal output across user space, kernel, and device layers](figures/program-launch-path.svg)
 *Figure 1.2: Even a trivial `hello` program crosses layers repeatedly. The shell creates a process, `execve()` installs a new image, the loader maps dependencies, and `write()` crosses back into the kernel to reach the terminal.*
 
-Several important OS ideas are already visible here.
+Three ideas matter here.
 
-- **Process creation** is not the same as program loading. `fork()` or
-  `clone()` creates an execution context; `execve()` replaces its code and
-  data image.
+**Process creation** is not the same as program loading. `fork()` or
+`clone()` creates an execution context; `execve()` replaces its code and
+data image. That separation is a Unix design choice, not an accident. It
+lets the parent set up file descriptors, environment, and credentials before
+the new program image is installed, which is how shells implement
+redirection, pipelines, and job control (Ritchie & Thompson, 1974).
 
-![fork() creates a child process by duplicating the parent, distinguished by the return value](figures/fork.png)
-*Figure 1.3: `fork()` duplicates the parent process. Parent and child share the same code but diverge immediately: the parent receives the child's PID, the child receives zero.*
+**Virtual memory** is established before most of your code runs. `mmap()`
+creates address-space regions, but pages are often backed lazily and only
+become physical on first touch. That is why a tiny program can still show
+page faults: the fault may be part of setting up the program image and
+shared libraries, not evidence that the program allocated a large heap.
 
-![execve() replaces the running process image with a new executable loaded from disk](figures/exec.png)
-*Figure 1.4: `execve()` does not create a new process — it replaces the current one. The kernel loads the new program from disk into the same process's address space.*
-
-The separation between `fork()` and `exec()` is a deliberate Unix design
-decision. It means the parent can set up file descriptors, environment, and
-credentials between the two calls. That gap is where shells implement
-redirection, pipelines, and job control. After `execve()`, the old program
-image is gone and the process continues with the new one.
-
-![The parent calls wait() to block until the child exits, then collects its exit status](figures/wait.png)
-*Figure 1.5: The parent calls `wait()` to synchronize with the child. Without it, the child becomes a zombie — finished but not yet reaped — until the parent collects the status.*
-
-![A process is a running program: the kernel loads code and static data from disk into memory, creates a stack, and begins execution](figures/process-2.png)
-*Figure 1.6: A process is a program in execution. The kernel loads the binary from storage into a virtual address space with code, data, heap, and stack segments.*
-
-- **Virtual memory** is established before most of your code runs. `mmap()`
-  creates address-space regions, but pages are often backed lazily and only
-  become physical on first touch.
-- **Privilege boundaries** matter even for trivial I/O. The process cannot
-  write to the terminal directly; it must cross into the kernel, which owns
-  the device interface.
-- **Failures are specific.** `execve()` can fail with `ENOENT` or `EACCES`.
-  `mmap()` can fail under address-space or memory pressure. `write()` can
-  block on a pipe, socket, or terminal buffer.
+**Privilege boundaries** matter even for trivial I/O. The process cannot
+write to the terminal directly; it must cross into the kernel, which owns
+the device interface. The same specificity applies to failures. `execve()`
+can fail with `ENOENT` or `EACCES`; `mmap()` can fail under address-space or
+memory pressure; `write()` can block on a pipe, socket, or terminal buffer.
 
 Now measure the same program:
 
@@ -233,7 +247,7 @@ kernel policy, and hardware execution. That is why the book insists on
 cross-layer explanations. A production incident rarely lives at just one
 layer.
 
-## 1.5 How This Book Is Organized
+## 1.5 How should you use the rest of the book?
 
 Part I establishes the method. Later parts apply it to processes,
 scheduling, containers, Kubernetes, distributed systems, storage, and
@@ -268,8 +282,9 @@ Key takeaways from this chapter:
   memory, protection, and I/O.
 - The useful boundary map is user space ↔ kernel ↔ hardware, with runtimes
   and control planes adding policy above it. Good diagnosis depends on
-  knowing which layer owns which decision.
-- This book trains three skills in order: understand the mechanism, measure
+  knowing which layer owns the decision and which layer pays the execution
+  cost.
+- This book trains three habits in order: understand the mechanism, measure
   it with reproducible evidence, and explain the result causally.
 - Even a trivial `hello` program exercises process creation, `execve()`,
   virtual memory setup, dynamic linking, syscall crossing, scheduling, and
@@ -280,8 +295,23 @@ Key takeaways from this chapter:
 - Arpaci-Dusseau, R. H. & Arpaci-Dusseau, A. C. (2018).
   *Operating Systems: Three Easy Pieces.* Introduction and Chapters 4–6.
   Available at <https://pages.cs.wisc.edu/~remzi/OSTEP/>
+- Ritchie, D. M. & Thompson, K. (1974). The UNIX time-sharing system.
+  *Communications of the ACM*, 17(7), 365–375.
+  <https://doi.org/10.1145/361011.361061>
+- Saltzer, J. H. & Schroeder, M. D. (1975). The protection of information
+  in computer systems. *Proceedings of the IEEE*, 63(9), 1278–1308.
+  <https://doi.org/10.1109/PROC.1975.9939>
+- Dean, J. & Barroso, L. A. (2013). The tail at scale.
+  *Communications of the ACM*, 56(2), 74–80.
+  <https://doi.org/10.1145/2408776.2408794>
+- Verma, A., Pedrosa, L., Korupolu, M., Oppenheimer, D., Tune, E., &
+  Wilkes, J. (2015). Large-scale cluster management at Google with Borg.
+  *EuroSys*. <https://doi.org/10.1145/2741948.2741964>
+- Burns, B., Grant, B., Oppenheimer, D., Brewer, E., & Wilkes, J. (2016).
+  Borg, Omega, and Kubernetes. *Communications of the ACM*, 59(5), 50–57.
+  <https://doi.org/10.1145/2890784>
 - Gregg, B. (2020). *Systems Performance*, 2nd ed. Addison-Wesley.
   Chapters 1–2.
 - Kerrisk, M. (2010). *The Linux Programming Interface.* Chapters 24–28.
-- Linux manual pages: `man 2 execve`, `man 2 fork`, `man 1 strace`, and
-  `man 1 perf-stat`.
+- Linux documentation: *Control Group v2*; `man 7 cgroups`; `man 2 execve`;
+  `man 2 fork`; `man 1 strace`; and `man 1 perf-stat`.
