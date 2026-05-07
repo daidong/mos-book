@@ -119,31 +119,39 @@ html.rust .page {
  * 3. Body type, measure, leading
  * ================================================================== */
 
+/* Override mdBook's default content max-width so the textbook measure
+   below has room to breathe. Default is 750px, which crushes a serif
+   body at 1.18rem. ~960px holds a 48em prose column comfortably. */
+:root {
+    --content-max-width: 960px;
+}
+
 .content main {
     font-family: var(--mos-serif);
-    font-size: 1.06rem;
-    line-height: 1.65;
+    font-size: 1.18rem;
+    line-height: 1.62;
     color: var(--mos-body);
     hyphens: auto;
     text-rendering: optimizeLegibility;
 }
 
-/* Comfortable measure for serif body type. mdBook's default page width
-   is too wide for prose. Aim for ~66 characters per line. */
+/* Comfortable measure for serif body type at 1.18rem: ~70 characters
+   per line, which matches a printed textbook page. */
 .content main > * {
-    max-width: 40em;
+    max-width: 48em;
     margin-left: auto;
     margin-right: auto;
 }
 
-/* Tables, code blocks, images, math display can use a slightly wider
-   column. Don't let them push past the page chrome, though. */
+/* Tables, code blocks, images, math display can use a wider column.
+   They are constrained by --content-max-width above so they will not
+   push past the page chrome on any screen. */
 .content main > table,
 .content main > pre,
 .content main > div,
 .content main > figure,
 .content main > p > img {
-    max-width: 46em;
+    max-width: 54em;
 }
 
 /* Tighten leading inside lists (paragraphs inside <li> need less air). */
@@ -208,9 +216,10 @@ html.rust .page {
     color: var(--mos-ink);
 }
 
-/* §N.M.K.L sub-subsection. */
+/* §N.M.K.L sub-subsection. Must stay above body size so the hierarchy
+   reads correctly (body is 1.18rem, so this lifts to 1.20rem). */
 .content h4 {
-    font-size: 1.06rem;
+    font-size: 1.20rem;
     font-weight: 700;
     margin-top: 1.4em;
     margin-bottom: 0.25em;
@@ -220,7 +229,7 @@ html.rust .page {
 
 .content h5,
 .content h6 {
-    font-size: 1.0rem;
+    font-size: 1.10rem;
     font-weight: 700;
     color: var(--mos-muted);
     margin-top: 1.2em;
@@ -230,7 +239,7 @@ html.rust .page {
 /* The first paragraph after the H1 deserves a tiny lift — slightly
    larger, drop cap on first letter, no first-line indent. */
 .content h1 + p {
-    font-size: 1.10rem;
+    font-size: 1.22rem;
     color: var(--mos-ink);
     margin-top: 0.4em;
 }
@@ -505,7 +514,7 @@ html.rust .page {
     font-size: 0.92em;
     color: var(--mos-muted);
     margin: -0.3em auto 1.8em;
-    max-width: 38em;
+    max-width: 44em;
     line-height: 1.45;
 }
 
@@ -547,17 +556,17 @@ html.rust .page {
 
 .sidebar {
     font-family: var(--mos-sans);
-    font-size: 0.92rem;
+    font-size: 1.05rem;
     line-height: 1.45;
 }
 
 .sidebar .sidebar-scrollbox {
-    padding: 1.1em 0.9em;
+    padding: 1.2em 1.0em;
 }
 
 .sidebar .chapter li.chapter-item {
     line-height: 1.45;
-    padding: 0.18em 0;
+    padding: 0.22em 0;
 }
 
 /* Top-level chapters slightly bolder. */
@@ -567,18 +576,18 @@ html.rust .page {
 
 /* Lab entries (nested under chapters) — quieter, slightly smaller. */
 .sidebar .chapter li.chapter-item li.chapter-item > a {
-    font-size: 0.93em;
+    font-size: 0.94em;
     color: var(--mos-muted);
 }
 
 /* "Part X: ..." headings in SUMMARY.md (top-level <h1> in the sidebar)
    should look like decorative dividers, not links. */
 .sidebar .chapter > li.part-title {
-    margin: 1.4em 0 0.4em;
-    padding-top: 0.6em;
+    margin: 1.5em 0 0.4em;
+    padding-top: 0.65em;
     border-top: 1px solid var(--mos-rule);
     font-family: var(--mos-sans);
-    font-size: 0.78em;
+    font-size: 0.82em;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -613,7 +622,7 @@ html.rust .page {
 .menu-title {
     color: var(--mos-ink);
     font-family: var(--mos-sans);
-    font-size: 0.96rem;
+    font-size: 1.05rem;
 }
 
 /* ====================================================================
@@ -621,18 +630,33 @@ html.rust .page {
  * ================================================================== */
 
 @media (max-width: 1080px) {
-    .content main { font-size: 1.04rem; }
-    .content main > * { max-width: 38em; }
-    .content h1 { font-size: 2.1rem; }
-    .content h2 { font-size: 1.4rem; }
+    .content main { font-size: 1.14rem; }
+    .content main > * { max-width: 44em; }
+    .content main > table,
+    .content main > pre,
+    .content main > div,
+    .content main > figure,
+    .content main > p > img { max-width: 50em; }
+    .content h1 { font-size: 2.25rem; }
+    .content h2 { font-size: 1.45rem; }
 }
 
 @media (max-width: 720px) {
-    .content main { font-size: 1.02rem; line-height: 1.6; }
-    .content main > * { max-width: 100%; padding-left: 0.4em; padding-right: 0.4em; }
-    .content h1 { font-size: 1.85rem; margin-bottom: 0.7em; }
-    .content h2 { font-size: 1.3rem; margin-top: 1.8em; }
-    .content h3 { font-size: 1.12rem; }
+    .content main { font-size: 1.10rem; line-height: 1.6; }
+    .content main > *,
+    .content main > table,
+    .content main > pre,
+    .content main > div,
+    .content main > figure,
+    .content main > p > img {
+        max-width: 100%;
+        padding-left: 0.4em;
+        padding-right: 0.4em;
+    }
+    .content h1 { font-size: 1.95rem; margin-bottom: 0.7em; }
+    .content h2 { font-size: 1.35rem; margin-top: 1.8em; }
+    .content h3 { font-size: 1.18rem; }
+    .content h1 + p { font-size: 1.14rem; }
     .content h1 + p::first-letter {
         float: none;
         font-size: inherit;
