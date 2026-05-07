@@ -1,0 +1,2 @@
+Concurrency primitives include locks, condition variables,
+and semaphores. Choosing the wrong primitive often hurts p99.

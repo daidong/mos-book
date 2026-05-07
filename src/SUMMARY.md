@@ -53,14 +53,9 @@
 
 # Part VI: Operating Systems for the AI Era
 
-- [Chapter 12: Agent Runtimes — Tool Calls as System Calls](part6-ai-era/ch12-agent-runtimes/index.md)
-    - [Lab: Build an Agent Sandbox](part6-ai-era/ch12-agent-runtimes/lab-agent-sandbox.md)
-
----
-
-# Part VII: Putting It All Together
-
-- [Chapter 13: Systems Research Methodology and Reproducibility](part7-synthesis/ch13-methodology-reproducibility/index.md)
+- [Chapter 12: Agent Runtimes — A New Substrate for OS Thinking](part6-ai-era/ch12-agent-runtimes/index.md)
+    - [Lab E: Build an Agent Sandbox](part6-ai-era/ch12-agent-runtimes/lab-agent-sandbox.md)
+    - [Lab F: Profile and Optimize a ReAct Agent](part6-ai-era/ch12-agent-runtimes/lab-react-perf.md)
 
 ---
 
@@ -69,3 +64,4 @@
 - [A: Capstone Projects](appendices/appendix-a-projects.md)
 - [B: Tool Reference](appendices/appendix-b-tool-reference.md)
 - [C: Environment Setup Guide](appendices/appendix-c-environment-setup.md)
+- [D: AI Use Policy](appendices/appendix-d-ai-policy.md)

@@ -275,59 +275,40 @@ Understanding this ordering lets you design capacity planning:
 workloads that must survive pressure should be Guaranteed;
 background batch work can be BestEffort and stay cheap.
 
-## 7.6 The Scheduler Pipeline
+## 7.6 Where the Scheduler Fits (Forward Pointer)
 
-When a Pod is created, the `kube-scheduler` decides which node runs
-it. The decision has three phases:
+QoS, throttling, and OOM all act on a Pod *after* it has been
+placed on a node. The placement decision itself — the Filter →
+Score → Bind pipeline that picks the node — is the subject of
+Chapter 9. For this chapter you only need one fact about it: the
+scheduler's `NodeResourcesFit` filter compares each Pod's *requests*
+(not limits) against the node's remaining *request budget*. That
+is why a Pod that fits comfortably under a node's actual idle
+CPU can still be reported as `0/3 nodes are available: 3
+Insufficient cpu`. The node has free CPU; what it does not have
+is free *request capacity* to promise the new Pod.
 
-```text
-Pod arrives
-   ↓
-Filter: which nodes can run it at all?
-   ↓
-Score: among those, which node is preferable?
-   ↓
-Bind: record the chosen node
-```
-
-- **Filter** (predicates). Each node is tested against a set of
-  rules. The critical one for capacity is **NodeResourcesFit**: the
-  node's remaining request capacity must cover the Pod's requests.
-  Other filters check taints/tolerations, node affinity, volume
-  availability, etc. A node failing any filter is removed from
-  consideration.
-- **Score** (priorities). Remaining feasible nodes are scored by
-  several plugins — balanced-resource-allocation, image-locality,
-  inter-pod-affinity, and so on. The highest-scoring node wins.
-- **Bind**. The scheduler writes `spec.nodeName` back to the Pod,
-  which triggers the kubelet on that node to do the actual
-  creation.
-
-When a Pod stays **Pending**, the scheduler's events tell you
-which phase blocked it:
+The diagnostic command is the same one you have used throughout
+this chapter:
 
 ```bash
 kubectl describe pod mypod | grep -A 10 Events
 # 0/3 nodes are available: 3 Insufficient cpu.
 ```
 
-"Insufficient cpu" is a filter failure — no node has enough free
-CPU request capacity. That is a *scheduling* problem, not an
-enforcement one. Raising limits does not help; either free
-capacity (delete other Pods) or reduce the Pod's requests.
+"Insufficient cpu" is a *filter* failure, not an enforcement
+failure. The fix is to free request capacity (delete or rightsize
+other Pods) or to lower this Pod's `requests`. Raising `limits`
+does not help, because filter math does not look at limits.
 
-### Extended resources and taints
-
-Two common filter complications:
-
-- **Extended resources.** Pods can request resources the kernel
-  does not know about, like `nvidia.com/gpu: 1`. The node
-  advertises these via a device plugin; the scheduler filters on
-  them like any other resource.
-- **Taints and tolerations.** A node can be "tainted"
-  (`kubectl taint nodes nodeA gpu=true:NoSchedule`); only Pods
-  that `tolerate` the taint are eligible. This is how clusters
-  reserve GPU nodes for GPU workloads.
+Chapter 9 covers the rest: how Filter and Score plugins are
+wired together, how Taints / Tolerations / Affinity layer onto
+the pipeline, how `MostAllocated` vs `LeastAllocated` choose
+packing vs spreading, and how Priority + Preemption let urgent
+Pods evict less important ones. The Chapter 9 lab
+(`scheduler-sim`) implements three of these policies (FIFO,
+Backfill, DRF) as a Python simulator so you can see the
+placement decisions side-by-side.
 
 ## Summary
 

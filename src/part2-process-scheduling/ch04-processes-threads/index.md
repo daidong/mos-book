@@ -392,6 +392,76 @@ to reduce the queue (by nicing background work, pinning the
 latency-sensitive task to its own CPU, or isolating it in a cgroup
 with guaranteed CPU).
 
+### A second production context: thread-per-request vs async I/O in microservices
+
+The payment-service sketch above shows queueing on a shared core.
+A second pattern is worth naming because every microservice fleet
+eventually hits it: how many *runnable* threads are there per
+core in the first place?
+
+Web tiers historically used a **thread-per-request** model: one
+worker thread serves one HTTP request from accept to response.
+Apache's prefork MPM, Tomcat's default executor, classical Java
+servlet containers, Python `gunicorn --workers`, Ruby's Puma in
+thread mode — all variants of the same idea. With 200
+concurrent requests and a thread-per-request server, you have
+200 threads. On a 4-core box that is up to 50 runnable threads
+per CPU when traffic spikes. CFS will round-robin them; each
+request pays scheduling-latency that scales with the runqueue
+depth, and p99 deteriorates exactly as the payment-service
+incident describes.
+
+The modern alternative is **async I/O on a small thread pool**.
+Node.js (one event-loop thread plus a libuv worker pool), Go
+(M:N goroutines on `GOMAXPROCS` OS threads), Rust's Tokio,
+Python's `asyncio`, JVM virtual threads (Project Loom, Java 21+) —
+all of them keep the OS-thread count small (typically equal to
+core count) and multiplex many in-flight requests onto each
+thread, suspending whenever a request blocks on the network or
+disk. Runqueue depth stays close to one regardless of
+concurrency, so scheduling-latency does not inflate.
+
+This is why the same service rewritten from threaded Python to
+async Python or from blocking JDBC to a reactive driver often
+shows a 3–10× reduction in p99 with no algorithmic change.
+Netflix's 2014–2018 rewrite of its API tier from blocking
+Servlets to RxJava and then Project Reactor was driven almost
+entirely by this number; LinkedIn's *Rest.li* and Uber's H3
+stacks made the same pivot. The mechanism in all cases is the
+one we just named: fewer runnable threads per core means
+shorter runqueues, which means lower scheduling-latency
+variance, which means lower p99.
+
+Thread-per-request is not strictly worse — it is simpler to
+debug, easier to reason about under failure, and on hardware
+where requests are CPU-bound (image transcoding, ML inference)
+it may even win. The question to ask in a code review is not
+*"is this async?"* but *"what is the steady-state runnable
+thread count per core, and does its variance explain my p99?"*
+That question maps directly to the Chapter 5 lab.
+
+A cheat sheet for the three concurrency models you will see in
+practice:
+
+| Property | pthread (one OS thread per request) | Goroutine (M:N green threads, Go) | Async I/O (single-threaded event loop, e.g. Node.js, Python `asyncio`, Rust Tokio) |
+|---|---|---|---|
+| Thread of execution | OS thread, kernel-scheduled | green thread, multiplexed onto N OS threads (`GOMAXPROCS`) | callback / coroutine, multiplexed onto 1–few OS threads |
+| Stack | fixed, ~1–8 MiB per thread | growable, starts at 2–8 KiB | none per task; one shared call stack |
+| Context-switch cost | ~1–3 µs (kernel `__switch_to`) | ~200–500 ns (Go runtime swap) | ~50–100 ns (function-call return into the loop) |
+| Concurrency ceiling on a 4-core box | ~10³ threads before runqueue depth hurts p99 | ~10⁶ goroutines per process | ~10⁴–10⁵ in-flight I/Os per loop |
+| Blocking I/O behavior | thread parks; CFS picks another | runtime parks the goroutine, picks another on the same OS thread | task suspends; loop runs the next ready callback |
+| CPU-bound workloads | wins (no runtime overhead per task) | OK; runtime preempts at function calls | hurts (one slow task blocks the loop) |
+| Debuggability | excellent (each request is one thread, one stack) | good (`pprof` traces per goroutine) | painful (callback / await chains hide causality) |
+| Failure mode | runqueue depth → scheduling-latency tail (this chapter's lab) | scheduler-runtime contention; "`runtime: too many sleeping goroutines`" | one CPU-bound task starves the loop; latency spikes everywhere |
+| Real systems | Apache prefork, Tomcat, Java pre-21, gunicorn `--workers` | Kubernetes control plane, Docker, etcd, CockroachDB, most Go services | Node.js, Nginx, Envoy data plane, Python `asyncio`, Rust Tokio |
+
+The table is not a verdict. Each row is a *consequence* of the
+stack-and-scheduling choice. When you tune the wrong knob —
+trying to lower a Goroutine-runtime contention spike with kernel
+schedtune, or fixing an event-loop CPU-bound stall with more OS
+threads — you are reading the wrong row of this table for your
+workload.
+
 The lab at the end of this chapter is a minimal scheduling-latency
 experiment: a periodic probe that measures how late it wakes up,
 a background load generator that creates contention, and a

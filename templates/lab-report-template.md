@@ -9,8 +9,7 @@
 ## 1. Environment
 
 Fill in the table below before running any measurements. This is
-the minimum required reproducibility record (see Chapter 13 and
-Appendix C).
+the minimum required reproducibility record (see Appendix C).
 
 | Property | Value |
 |----------|-------|
@@ -71,8 +70,7 @@ Same structure.
 
 For each performance or correctness claim in this report, fill in
 the table below. The claim is only supported if there are two
-independent signals and one exclusion check (see §3 of Chapter 3
-and §13.2 of Chapter 13).
+independent signals and one exclusion check (see §3 of Chapter 3).
 
 | Claim | Signal 1 | Signal 2 | Excluded |
 |-------|----------|----------|----------|
@@ -81,7 +79,29 @@ and §13.2 of Chapter 13).
 
 ---
 
-## 6. Reflection
+## 6. Evidence Trail
+
+See Appendix D for the full AI Use Policy.
+
+### AI Tool Use
+
+- **Tool(s) used:** [e.g., "ChatGPT for debugging a Makefile
+  error" / "GitHub Copilot for boilerplate in the plotting script"
+  / "None"]
+- **What the tool suggested:** [one-sentence summary, or "N/A"]
+- **What I independently verified:** [what you checked, re-ran, or
+  confirmed against your own data]
+- **What I changed or rejected:** [if the suggestion was wrong or
+  inapplicable, note it here]
+
+### Failures and Iterations
+
+- [Briefly describe at least one thing that did not work on the
+  first attempt and what you learned from it.]
+
+---
+
+## 7. Reflection
 
 - One thing that surprised you:
 - How this connects to earlier chapters:
@@ -89,7 +109,7 @@ and §13.2 of Chapter 13).
 
 ---
 
-## 7. Artifact
+## 8. Artifact
 
 List every file submitted alongside this report. A peer should be
 able to regenerate every figure and table from this list.

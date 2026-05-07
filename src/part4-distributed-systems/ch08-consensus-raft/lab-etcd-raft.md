@@ -385,6 +385,40 @@ Submit:
 3. **Environment block** — VM config, Docker version, etcd
    version, disk type (SSD / spinning / virtualized).
 
+## AI Use and Evidence Trail
+
+This lab is graded on **prediction → evidence → mechanism**, not
+on polish. AI tools are allowed within
+[Appendix D](../../appendices/appendix-d-ai-policy.md) (Regime 1):
+they may help debug, recall flags, or polish prose; they may
+**not** generate the prediction, fabricate raw data, or substitute
+for your own mechanism-level explanation. Substantial use must be
+disclosed in the Evidence Trail — honest disclosure is not
+penalized; non-disclosure of substantial use is.
+
+Append the following section to your report (full template and
+examples in Appendix D §"The Evidence Trail"):
+
+```markdown
+## Evidence Trail
+
+### Environment and Reproduction
+- Commands used: see the Procedure sections above
+- Raw output files: list paths in your submission
+
+### AI Tool Use
+- **Tool(s) used:** [tool name and version, or "None"]
+- **What the tool suggested:** [one-sentence summary, or "N/A"]
+- **What I independently verified:** [what you re-checked against
+  your own data]
+- **What I changed or rejected:** [if a suggestion was wrong or
+  inapplicable]
+
+### Failures and Iterations
+- [At least one thing that did not work on the first attempt and
+  what you learned from it.]
+```
+
 ## Grading Rubric
 
 | Criterion | Points |

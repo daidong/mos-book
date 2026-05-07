@@ -38,11 +38,17 @@ University of Delaware (`/Users/daidong/Documents/rp-writings/OS-CISC663`).
 | Ch 9 | Week 8 | Kubernetes Scheduling and the Control Plane | Cluster Scheduling Simulation (Lab 8) |
 | Ch 10 | Week 9 | File Systems, Page Cache, and Durability | fsync Latency Measurement (Lab 9) |
 | Ch 11 | Week 10 | Distributed Storage — From KV Store to Object Store | Redis and etcd Benchmarks (Lab 10) |
-| Ch 12 | Week 11 | Agent Runtimes — Tool Calls as System Calls | Build an Agent Sandbox (Lab E) |
-| Ch 13 | Week 12 | Systems Research Methodology and Reproducibility | Peer Reproduction Exercise |
+| Ch 12 | Week 11 | Agent Runtimes — A New Substrate for OS Thinking | Lab E: Build an Agent Sandbox + Lab F: Profile and Optimize a ReAct Agent |
 | App A | projects/ | Capstone Projects (4 options) | — |
 | App B | Various | Tool Reference (perf, eBPF, cgroup, kubectl) | — |
 | App C | Week 0 | Environment Setup Guide | — |
+| App D | Week 0 | AI Use Policy | — |
+
+*Removed 2026-04-30:* Ch 13 / Part VII ("Systems Research
+Methodology and Reproducibility"). Its essential material —
+evidence contract and reproducibility artifacts — is covered
+by Chapter 3 §3 and Appendix C respectively, which is
+sufficient for the current scope.
 
 ---
 
@@ -117,13 +123,9 @@ mos-book/
 │   │
 │   ├── part6-ai-era/
 │   │   └── ch12-agent-runtimes/
-│   │       ├── index.md               # STUB NEEDED
-│   │       ├── lab-agent-sandbox.md   # STUB NEEDED
-│   │       └── figures/
-│   │
-│   ├── part7-synthesis/
-│   │   └── ch13-methodology-reproducibility/
-│   │       ├── index.md               # STUB NEEDED
+│   │       ├── index.md
+│   │       ├── lab-agent-sandbox.md
+│   │       ├── lab-react-perf.md
 │   │       └── figures/
 │   │
 │   └── appendices/
@@ -189,9 +191,10 @@ mos-book/
 - [x] `src/part5-storage/ch10-filesystems/lab-fsync-latency.md`
 - [x] `src/part5-storage/ch11-distributed-storage/index.md` — Distributed Storage
 - [x] `src/part5-storage/ch11-distributed-storage/lab-redis-etcd-bench.md`
-- [x] `src/part6-ai-era/ch12-agent-runtimes/index.md` — Agent Runtimes
-- [x] `src/part6-ai-era/ch12-agent-runtimes/lab-agent-sandbox.md`
-- [x] `src/part7-synthesis/ch13-methodology-reproducibility/index.md`
+- [x] `src/part6-ai-era/ch12-agent-runtimes/index.md` — Agent Runtimes (safety + performance lenses)
+- [x] `src/part6-ai-era/ch12-agent-runtimes/lab-agent-sandbox.md` (Lab E)
+- [x] `src/part6-ai-era/ch12-agent-runtimes/lab-react-perf.md` (Lab F — from week11)
+- [removed 2026-04-30] `src/part7-synthesis/ch13-methodology-reproducibility/`
 - [x] `src/appendices/appendix-a-projects.md`
 - [x] `src/appendices/appendix-b-tool-reference.md`
 - [x] `src/appendices/appendix-c-environment-setup.md`
@@ -295,7 +298,7 @@ All content comes from: `/Users/daidong/Documents/rp-writings/OS-CISC663/`
 - Ch 9: week8_real/week8_v3.md, week8_real/lab8_scheduling_instructions.md
 - Ch 10: week9_fs/week9_slides.md, week9_fs/lab9_instructions.md
 - Ch 11: week10_dist/week10_slides.md, week10_dist/lab10_instructions.md
-- Ch 12: week11/week11_slides.md, week11/lab_e_instructions.md
+- Ch 12: week11/week11_slides.md, week11/lab_f/lab_f_instructions.md, week11/starter/ (agent.py, tracer.py, waterfall.py); legacy security version retained in week11/*.bak_security_version
 - Ch 13: week12/README.md, week12/grading_rubric.md, week12/final_report_template.md
 
 **Figures available:**

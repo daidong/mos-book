@@ -286,6 +286,25 @@ Three is the minimum; five is better.
 **Rates, not just counts.** Report IPC, miss rates, and fault rates, not
 just raw counters that scale with input size.
 
+The properties above are easier to use as a checklist if you know what
+failure looks like. Two examples of the same comparison — one done
+badly, one done well — with the same conclusion.
+
+| Step | Bad experiment | Good experiment |
+|---|---|---|
+| Question | "Is the new sort faster?" | "At input size N=10⁶ with random integers, does `qsort_v2` reduce p50 user-time by ≥5% versus `qsort_v1` on this CPU?" |
+| Variable | unstated; "the code changed" | exactly one: the sort implementation; everything else (compiler, flags, input, machine) is fixed |
+| Baseline | "the previous version" — unspecified version | `qsort_v1@<commit>`, with the binary archived |
+| Runs | one run per side | five runs per side, alternating order, governor = `performance`, taskset to one core |
+| Reported metric | wall-clock seconds | IPC, branch-miss rate, p50 of user-time across the five runs, with min/max |
+| Conclusion | "v2 is 7% faster" | "On this hardware, v2's p50 user-time is 4.8% lower (95% CI [3.1%, 6.2%]); IPC unchanged; branch-miss rate dropped from 4.1% to 3.6%, consistent with the new pivot heuristic." |
+| What it survives | nothing — reviewer reruns it once and gets a different number | another engineer can re-run it on a comparable host and replicate within the CI |
+
+The "bad" column is not a strawman. Most internal performance reports
+an engineer reads in their first year of work look like the bad column.
+The goal of the rest of this chapter is to make the good column
+the default.
+
 On shared systems, add a fifth property: **hygiene**.
 
 | Source of noise | Why it matters | Mitigation |
@@ -304,6 +323,48 @@ engineers know which one they are doing.
 > **Warning:** If your measurement method cannot survive background noise,
 > scheduler movement, and unavailable counters, it is not robust enough for
 > modern systems work.
+
+### A production case: hash-table lookups on Facebook's web tier
+
+The four-property checklist above is not aspirational. Facebook's
+2015 paper *Profiling a Warehouse-Scale Computer* (Kanev et al.,
+ISCA '15) is the canonical example of getting it right at scale.
+The team ran continuous, fleet-wide `perf` sampling on the
+production web servers and aggregated the data across millions of
+machine-hours. The headline finding was sobering and concrete:
+
+- About **30%** of the entire fleet's CPU was spent in just a few
+  primitives — memory allocation, hashing, and string handling.
+- The TLB, not the data cache, was a major source of stalls. The
+  reasoning broke a common mental model ("L1 misses dominate"):
+  workloads with deep call graphs and broad working sets miss in
+  the TLB more than in any data cache.
+- IPC was roughly **0.6–0.7**, well below the ~2.0 a tight
+  benchmark gets. Most of the gap was front-end and translation
+  stalls, not memory-bandwidth saturation.
+
+The methodology mattered as much as the result. Single machines
+could not have produced any of those numbers: hardware variance
+and workload mix swamp signal at small scale. By keeping the
+experiment continuous, multi-machine, and counter-rate-based
+(IPC, branch-miss rate, TLB miss rate — not raw counts), the
+team produced a finding that survived the noise.
+
+The followup that turned the result into a production change is
+equally instructive. Google’s *AutoFDO* and Facebook's *BOLT*
+(Panchenko et al., CGO '19) both came from the same observation:
+if the fleet's hot paths are predictable from sampled profiles,
+you can use those profiles to feed back into the compiler and
+linker. BOLT reorders basic blocks at link time using fleet
+perf samples and ships ~5–7% IPC improvements on hyperscale
+webservers — a number that would be invisible without
+production-scale sampling but is large enough to justify entire
+datacenters' worth of capital.
+
+The lab in this chapter is not at fleet scale. The discipline
+is the same: name the variable, fix the baseline, sample for
+long enough, report rates instead of raw counts, and refuse to
+stop until the noise is smaller than the effect.
 
 ## Summary
 

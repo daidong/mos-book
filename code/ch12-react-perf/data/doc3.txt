@@ -1,0 +1,2 @@
+Tail latency in storage is dominated by fsync. The page cache
+hides most reads, but durable writes must hit disk.

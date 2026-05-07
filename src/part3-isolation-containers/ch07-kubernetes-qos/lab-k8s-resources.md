@@ -82,6 +82,33 @@ Keep this shell open — you will use it repeatedly.
 **Goal:** Deploy Guaranteed, Burstable, and BestEffort Pods, and
 verify how each is reflected in cgroup settings.
 
+### A.0 Predict before you deploy
+
+Before running `kubectl apply`, fill in the table below from the
+YAML in `manifests/qos-comparison.yaml` and Chapter 7 §7.3 alone.
+Do not look at the actual cgroup; this is a prediction:
+
+| Pod | `cpu` request → predicted `cpu.max` (period 100 000) | `memory` limit → predicted `memory.max` (bytes) |
+|---|---|---|
+| qos-guaranteed |   |   |
+| qos-burstable  |   |   |
+| qos-besteffort |   |   |
+
+For reference: a Pod with `cpu: 200m` should produce
+`cpu.max = "20000 100000"`, because the kubelet uses the cgroup-v2
+default period of 100 000 µs and writes a quota of `200/1000 × 100 000 = 20 000 µs`.
+Derive the equivalent number for whatever value
+`qos-burstable` actually requests; predict the literal string the
+kubelet will write. **An off-by-zero prediction (e.g.,
+`"200000 100000"`) means you confused millicores with microseconds;
+fix that mental model before you measure.**
+
+For BestEffort, predict whether `cpu.max` will be the literal
+string `"max 100000"` or empty, and justify in one sentence.
+
+After measuring in A.2, list any pod where your prediction was
+wrong and explain the gap in one sentence.
+
 ### A.1 Deploy
 
 ```bash
@@ -304,6 +331,40 @@ Submit:
    `oom_kernel.txt`, `oom_events.txt`.
 3. **Environment block** — Kubernetes version, kernel version on
    the `kind` node, Docker version, host OS.
+
+## AI Use and Evidence Trail
+
+This lab is graded on **prediction → evidence → mechanism**, not
+on polish. AI tools are allowed within
+[Appendix D](../../appendices/appendix-d-ai-policy.md) (Regime 1):
+they may help debug, recall flags, or polish prose; they may
+**not** generate the prediction, fabricate raw data, or substitute
+for your own mechanism-level explanation. Substantial use must be
+disclosed in the Evidence Trail — honest disclosure is not
+penalized; non-disclosure of substantial use is.
+
+Append the following section to your report (full template and
+examples in Appendix D §"The Evidence Trail"):
+
+```markdown
+## Evidence Trail
+
+### Environment and Reproduction
+- Commands used: see the Procedure sections above
+- Raw output files: list paths in your submission
+
+### AI Tool Use
+- **Tool(s) used:** [tool name and version, or "None"]
+- **What the tool suggested:** [one-sentence summary, or "N/A"]
+- **What I independently verified:** [what you re-checked against
+  your own data]
+- **What I changed or rejected:** [if a suggestion was wrong or
+  inapplicable]
+
+### Failures and Iterations
+- [At least one thing that did not work on the first attempt and
+  what you learned from it.]
+```
 
 ## Grading Rubric
 

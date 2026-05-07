@@ -91,6 +91,45 @@ eventual, with some strong-consistency knobs.
 > "writes on the minority side" or "reads may be stale" — but
 > which one depends entirely on the design.
 
+### A worked partition: same event, four storage backends
+
+The abstract framing above is easier to keep straight if you trace
+one partition through several systems. Setup: a 5-node cluster
+spread across two datacenter zones; a switch failure cuts the
+link such that **3 nodes are in zone A**, **2 nodes in zone B**;
+a client in zone B issues two operations during the partition:
+`PUT k=1` followed by `GET k`.
+
+| Backend | What zone B sees on `PUT k=1` | What zone B sees on `GET k` | What zone A sees | What recovery looks like |
+|---|---|---|---|---|
+| **etcd (CP, Raft)** | **Error / timeout.** Zone B has 2 nodes; quorum is 3. The leader is in zone A or has stepped down. No write possible. | If a stale follower is in zone B and serializable reads are allowed, returns the *pre-partition* value; default linearizable read fails. | Continues serving reads and writes normally (it has quorum). | When the partition heals, zone B's nodes catch up via Raft AppendEntries; zone B sees nothing it did during the partition because nothing happened. |
+| **Redis async replication (AP)** | Returns OK locally if zone B contains a replica configured as a primary (or after a Sentinel-driven failover). Otherwise the client retries against zone A's primary, depending on the proxy. | Returns 1 — zone B's local replica saw the write. | Zone A's primary still has the *old* value; Sentinel may promote a zone-B replica, creating a split-brain. | After heal, one side's writes must be **dropped** (typically the smaller side's). "Cluster nodes do not agree" is logged; data loss is silent unless you instrument it. |
+| **DynamoDB / Cassandra (AP, quorum-tunable)** | Returns OK if write-quorum is `LOCAL_ONE` or `LOCAL_QUORUM`; fails if `QUORUM` or `EACH_QUORUM` and zone B does not have enough replicas. | Returns 1 with `LOCAL_ONE`; returns the older value (or nothing) with `QUORUM` if it cannot reach a majority. | Continues with its own view; both sides accept writes if `LOCAL_*` consistency. | Anti-entropy / read-repair / hinted-handoff merge the two histories on heal; **last-write-wins by timestamp** is the default conflict resolution — which means the side with the slightly later wall clock wins, regardless of intent. |
+| **S3 (AP, strong per-key)** | If the client routes to a region where its account is hosted, returns OK; if cross-region replication is on, the write is local and propagates async. | Returns 1, because S3's 2020-onward strong-per-key consistency guarantees a read of the *most recent* write the client itself made. | Sees the write only after asynchronous replication completes; cross-region reads can lag. | No reconciliation needed inside a region. Cross-region replication just resumes; objects are independent (no shared keys). |
+
+Three consequences worth saying out loud:
+
+- **etcd lost availability on the minority side, kept consistency.**
+  That is what "CP" means in this row of the table; it is also why
+  etcd is the right place for cluster metadata and the wrong place
+  for high-throughput user data.
+- **Redis kept availability, lost a write durably.** A failover
+  during partition is a *real* split-brain. The "AP" choice has a
+  bill, paid in lost user data, that the system does not always
+  surface.
+- **"Strong per-key consistency" (S3) is not the same as
+  linearizability across keys.** A multi-key transaction that
+  spans a partition can still observe inconsistent ordering; the
+  guarantee is per-object, not global. Most people get this wrong
+  on a whiteboard.
+
+The lab's etcd benchmarks (Lab 11 Part C) and Redis benchmarks
+(Lab 11 Part A) measure the *cost* of these choices in normal
+operation: etcd pays the latency of Raft commit on every write,
+Redis pays nothing extra in the steady state but pays the
+table-row above when the network breaks. The CAP theorem is the
+framework; the partition trace is the price tag.
+
 ## 11.3 etcd: WAL + bbolt
 
 You already know etcd's replication layer from Chapter 8. Its

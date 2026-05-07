@@ -162,6 +162,39 @@ Record the cold-vs-warm ratio. Explain using Chapter 10 §10.3.
 
 ## Part C: Write Latency Measurement (Required, 30 min)
 
+### C.0 Predict before you measure
+
+Before building anything, write the following in your report:
+
+> *"On my hardware (host = ____, storage = ____ from `lsblk`),
+> the median per-write latency ratio
+> `T_buffered : T_fdatasync : T_fsync` will be approximately
+> ____ : ____ : ____ µs, because ____."*
+
+Fill in the three numbers. The reasoning blank must name the
+mechanism ("buffered hits page cache only; fdatasync forces a
+log commit + data flush; fsync also forces inode timestamp
+metadata"), not just "fsync is slower".
+
+Reference points from Chapter 10 §10.5 to anchor your numbers:
+buffered writes typically land in 1–5 µs on any modern host;
+fdatasync on an enterprise SSD lands in ~50–500 µs; fdatasync on
+a consumer SSD or VirtualBox-on-laptop disk frequently sits in
+the 1–10 ms range. The buffered-to-fdatasync ratio is therefore
+often 100–1000×.
+
+**If you are running in a VM with the host write cache enabled,
+predict that fsync will be “too fast to be true” (≤ 100 µs)
+and explain why — the VM is acknowledging the write before the
+physical disk does.** This is a real failure mode in benchmarks;
+looking for it before you measure is half the lesson of Part C.
+
+After you measure (§C.3), write one paragraph comparing your
+predicted ratio to the measured ratio. State whether the
+difference is explained by (a) hardware differences from the
+reference points above, (b) your VM lying about persistence, or
+(c) a wrong mental model of the fsync path. Pick exactly one.
+
 ### C.1 Build `write_latency`
 
 Source in `code/ch10-fsync-bench/write_latency.c`:
@@ -347,6 +380,40 @@ Your `report.md` must include:
 - Part D: interference table with p99 ratios, one paragraph per
   experiment linking the ratio to a mechanism.
 - (Optional) Part E: `iostat` / `strace` corroboration.
+
+## AI Use and Evidence Trail
+
+This lab is graded on **prediction → evidence → mechanism**, not
+on polish. AI tools are allowed within
+[Appendix D](../../appendices/appendix-d-ai-policy.md) (Regime 1):
+they may help debug, recall flags, or polish prose; they may
+**not** generate the prediction, fabricate raw data, or substitute
+for your own mechanism-level explanation. Substantial use must be
+disclosed in the Evidence Trail — honest disclosure is not
+penalized; non-disclosure of substantial use is.
+
+Append the following section to your report (full template and
+examples in Appendix D §"The Evidence Trail"):
+
+```markdown
+## Evidence Trail
+
+### Environment and Reproduction
+- Commands used: see the Procedure sections above
+- Raw output files: list paths in your submission
+
+### AI Tool Use
+- **Tool(s) used:** [tool name and version, or "None"]
+- **What the tool suggested:** [one-sentence summary, or "N/A"]
+- **What I independently verified:** [what you re-checked against
+  your own data]
+- **What I changed or rejected:** [if a suggestion was wrong or
+  inapplicable]
+
+### Failures and Iterations
+- [At least one thing that did not work on the first attempt and
+  what you learned from it.]
+```
 
 ## Grading Rubric
 

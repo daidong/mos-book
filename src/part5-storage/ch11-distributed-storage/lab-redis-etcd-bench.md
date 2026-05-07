@@ -47,6 +47,43 @@ chmod +x mc && sudo mv mc /usr/local/bin/
 **Goal:** Measure the throughput-vs-durability tradeoff from
 three `appendfsync` policies.
 
+### A.0 Predict before you measure
+
+Using only your fsync numbers from Lab 10 (Chapter 10) and the
+AOF semantics from Chapter 11 §11.3, write the following
+prediction in your report:
+
+> *"At pipeline depth 1, `appendfsync no` will sustain ____
+> ops/s; `everysec` will sustain ____ ops/s; `always` will
+> sustain ____ ops/s. The throughput ratio
+> `no : everysec : always` will be approximately ____ : ____ : ____,
+> because ____."*
+
+Fill in three throughput numbers and the ratio. The reasoning
+blank must explain *which writes pay an fsync each* (only the
+background writer / once per second / every command's reply) —
+not just "`always` is slower".
+
+A reasonable starting model on enterprise SSD: `everysec` is
+essentially free per command (one fsync amortizes over
+~10 000–50 000 commands), while `always` pays one fsync per
+command. If your Lab 10 measured ~1 ms per fdatasync, then
+stand-alone `always` cannot exceed 1 / 0.001 = 1000 ops/s, and
+your predicted `everysec : always` ratio should be at least 10×
+(often 50–100× on consumer hardware).
+
+Then predict the second-order effect:
+
+> *"At pipeline depth 16, the `everysec : always` ratio will
+> shrink / stay the same / grow, because ____."*
+
+Pick one. The Chapter 10 mental model of fsync is what tells
+you the answer; record your reasoning explicitly.
+
+After measuring (§A.4), tag each prediction as confirmed,
+off-but-correct-direction, or wrong, and explain any gap larger
+than 2× in one sentence.
+
 ### A.1 Launch Redis in each mode
 
 A helper script sets up all three instances with clean port assignments:
@@ -330,6 +367,40 @@ lab11/
 - Part C: etcd baseline vs during-compaction p99 with WAL and DB
   size evidence.
 - (Optional) Part D: comparison table across Redis/etcd/MinIO.
+
+## AI Use and Evidence Trail
+
+This lab is graded on **prediction → evidence → mechanism**, not
+on polish. AI tools are allowed within
+[Appendix D](../../appendices/appendix-d-ai-policy.md) (Regime 1):
+they may help debug, recall flags, or polish prose; they may
+**not** generate the prediction, fabricate raw data, or substitute
+for your own mechanism-level explanation. Substantial use must be
+disclosed in the Evidence Trail — honest disclosure is not
+penalized; non-disclosure of substantial use is.
+
+Append the following section to your report (full template and
+examples in Appendix D §"The Evidence Trail"):
+
+```markdown
+## Evidence Trail
+
+### Environment and Reproduction
+- Commands used: see the Procedure sections above
+- Raw output files: list paths in your submission
+
+### AI Tool Use
+- **Tool(s) used:** [tool name and version, or "None"]
+- **What the tool suggested:** [one-sentence summary, or "N/A"]
+- **What I independently verified:** [what you re-checked against
+  your own data]
+- **What I changed or rejected:** [if a suggestion was wrong or
+  inapplicable]
+
+### Failures and Iterations
+- [At least one thing that did not work on the first attempt and
+  what you learned from it.]
+```
 
 ## Grading Rubric
 

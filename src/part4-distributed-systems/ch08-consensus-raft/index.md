@@ -184,6 +184,81 @@ propagate `X` instead of its own value. A later proposer thus
 > Two majorities out of N overlap. That overlap is how history
 > survives, without any node needing a global view.
 
+### A worked Paxos trace: how a partition gets healed
+
+Paxos's safety argument is easier to see when the protocol is
+actually fighting for it. A scenario with three acceptors
+(A1, A2, A3) and two competing proposers (P1, P2). The setup:
+P1 has briefly partitioned away from A3 and is unaware of P2.
+Proposal numbers are written `(round, proposer_id)`, lexicographic
+order.
+
+```text
+t0  P1 → Prepare(n=(1,P1))         broadcast
+       A1, A2 receive; A3 partitioned away
+       A1 promises (1,P1); replies ⟨(1,P1), no prior accept⟩
+       A2 promises (1,P1); replies ⟨(1,P1), no prior accept⟩
+       — P1 has a Phase-1 majority {A1, A2}, no prior value seen
+
+t1  P1 → Accept((1,P1), v="X")    broadcast
+       A1 accepts ⟨(1,P1), "X"⟩
+       — message to A2 dropped (still partitioned-ish)
+       A3 still unreachable
+       — P1 thinks the round will continue; nothing chosen yet
+       — (had A2 also accepted, X would have been CHOSEN here)
+
+t2  partition heals; P2 wakes up, knows nothing of P1
+       P2 → Prepare(n=(2,P2))      broadcast
+       A1 promises (2,P2); replies ⟨(2,P2), prior=((1,P1),"X")⟩
+       A2 promises (2,P2); replies ⟨(2,P2), no prior accept⟩
+       A3 promises (2,P2); replies ⟨(2,P2), no prior accept⟩
+
+t3  P2 inspects the Phase-1 replies it received from a majority.
+    The highest-numbered prior accept reported is ((1,P1), "X")
+    from A1. **Step 3 of the protocol forces P2 to propose X,
+    not its own value Y.**
+
+    P2 → Accept((2,P2), v="X")    broadcast
+       A1, A2, A3 all accept ⟨(2,P2), "X"⟩ — each had promised
+       to (2,P2) and not seen anything higher.
+       — "X" is now CHOSEN by majority. P1's original intent has
+         survived even though P1 itself never reached a Phase-2
+         majority.
+```
+
+Four things to notice in this trace:
+
+1. **Quorum intersection is doing the work at t2.** P2's Prepare
+   majority {A1, A2, A3} happens to include all three, but even
+   if it had been just {A1, A3}, it would still have intersected
+   with the singleton {A1} that had accepted X. *Any* majority
+   of three overlaps with any other majority of three by at
+   least one node — that one node is enough to surface the
+   prior accept.
+2. **A single accepted vote is enough to pin the value.** X was
+   never *chosen* in the strict sense (no majority accepted it
+   in round 1), yet step 3 of round 2 still forces P2 to carry
+   X forward. Paxos is conservative: it propagates anything that
+   *might have been* chosen.
+3. **P2 has no idea why it is proposing X.** P2 wanted Y. The
+   Prepare replies told P2 "someone else's proposal is older than
+   yours and was accepted by a node"; P2 dutifully proposes that
+   value. The protocol does not need the proposers to coordinate;
+   the acceptors' persistent state coordinates them.
+4. **If A1 had also crashed at t2 before replying to P2,** P2's
+   Prepare majority could have been {A2, A3}, neither of which
+   has the prior accept. P2 would propose Y, and Y would be
+   chosen. *That is correct behavior:* X was never chosen, so
+   either X or Y is a valid outcome; safety only requires that
+   *once* a value is chosen by a majority, no other value can
+   subsequently be chosen.
+
+The trace is what makes the safety argument concrete. The lab in
+this chapter watches the same dance happen in etcd's Raft
+implementation — with terms instead of proposal numbers and a
+leader instead of arbitrary proposers, but the underlying
+quorum-intersection logic is the one Paxos formalized first.
+
 The mechanism is correct but notoriously hard to implement
 faithfully. Exactly what state an acceptor persists, how a
 proposer numbers its proposals across restarts, and how Multi-Paxos

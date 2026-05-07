@@ -1,0 +1,2 @@
+Operating systems abstract hardware. Page caches, schedulers,
+and file systems each balance throughput against tail latency.

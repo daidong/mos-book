@@ -29,6 +29,34 @@ as events and diagnostic output. Starter code lives in
 **Goal:** Implement FIFO, Backfill, and DRF in a Python simulator
 and run them on the same mixed workload.
 
+### A.0 Predict before you implement
+
+Open `mixed_workload()` in `scheduler_sim.py` and read the
+definitions of the three users (Alice, Bob, Charlie). Without
+running anything, write down predictions in your report:
+
+1. **Under FIFO, which user's jobs will be delayed most, and
+   why?** Name the specific structural property (large gang-
+   scheduled jobs, long runtimes, late submission, low job
+   count) that produces head-of-line blocking and identify which
+   user has it.
+2. **Approximate ratio of `avg_wait_time(blocked-user) /
+   avg_wait_time(other-users)` under FIFO.** A number, not
+   "much higher".
+3. **Will Backfill help that user, hurt that user, or leave them
+   roughly unchanged compared to FIFO?** One sentence on the
+   mechanism.
+4. **Will DRF help that user, hurt that user, or leave them
+   roughly unchanged compared to FIFO?** One sentence; remember
+   DRF picks the *smallest* dominant share and that big jobs
+   inflate dominant share.
+
+After Part A.5 produces the comparison table, your report must
+record the actual numbers and explicitly mark each prediction
+as confirmed, off in magnitude but right in direction, or wrong.
+A wrong prediction with an honest mechanism diagnosis is worth
+full credit; a vague prediction ("FIFO is unfair") is not.
+
 ### A.1 The framework
 
 `scheduler_sim.py` ships with the data structures (`Job`,
@@ -284,6 +312,40 @@ Submit:
    - Part D (optional): etcd dump, consistency paragraph.
 3. **Environment block** — kernel, Kubernetes, `kind`, Python
    versions; cluster config used.
+
+## AI Use and Evidence Trail
+
+This lab is graded on **prediction → evidence → mechanism**, not
+on polish. AI tools are allowed within
+[Appendix D](../../appendices/appendix-d-ai-policy.md) (Regime 1):
+they may help debug, recall flags, or polish prose; they may
+**not** generate the prediction, fabricate raw data, or substitute
+for your own mechanism-level explanation. Substantial use must be
+disclosed in the Evidence Trail — honest disclosure is not
+penalized; non-disclosure of substantial use is.
+
+Append the following section to your report (full template and
+examples in Appendix D §"The Evidence Trail"):
+
+```markdown
+## Evidence Trail
+
+### Environment and Reproduction
+- Commands used: see the Procedure sections above
+- Raw output files: list paths in your submission
+
+### AI Tool Use
+- **Tool(s) used:** [tool name and version, or "None"]
+- **What the tool suggested:** [one-sentence summary, or "N/A"]
+- **What I independently verified:** [what you re-checked against
+  your own data]
+- **What I changed or rejected:** [if a suggestion was wrong or
+  inapplicable]
+
+### Failures and Iterations
+- [At least one thing that did not work on the first attempt and
+  what you learned from it.]
+```
 
 ## Grading Rubric
 

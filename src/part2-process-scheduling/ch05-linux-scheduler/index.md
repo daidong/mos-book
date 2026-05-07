@@ -336,6 +336,57 @@ The point: the recipe (two events, one piece of state) is not a
 classroom exercise. It is the standard first step in production
 scheduler debugging.
 
+### A second debugging vignette: cpuset isolation at cloud-provider scale
+
+The NUMA-pinning story above shows what one team did on one
+host. The platform-level version of the same problem is what
+hyperscalers do across millions of cores. Three documented
+patterns are worth naming:
+
+- **AWS Nitro / Firecracker hypervisor pinning.** AWS publishes
+  that each Nitro hypervisor reserves dedicated CPUs for the
+  platform (network, storage, telemetry) and exposes only the
+  remaining cores to the guest VM. The reservation uses
+  `cpuset` cgroups to fence the platform threads off the guest
+  cores. Without it, every guest's p99 would carry the variance
+  of every host-side packet interrupt and EBS I/O completion.
+  The published Nitro performance numbers (sub-millisecond IO
+  jitter on a c7i instance) are unreachable without this
+  isolation.
+
+- **Google Borg / Kubernetes static CPU manager.** Borg's
+  scheduler reserves whole physical cores for *latency-sensitive*
+  jobs and leaves the *batch* jobs to share the remainder via
+  CFS. Kubernetes copied the design as the kubelet's
+  `--cpu-manager-policy=static`: a Pod with `Guaranteed` QoS and
+  integer CPU requests gets pinned to specific cores via
+  `cpuset.cpus`, while every other Pod runs on the shared pool.
+  This is the production interpretation of Chapter 7's QoS
+  classes — they are not just a billing tier; they are a cgroup
+  membership decision that changes which CFS runqueue your
+  workload competes on.
+
+- **NUMA-aware pinning for ML inference.** Meta's published
+  inference stack (the *Meta AI Research SuperCluster* and the
+  Llama serving fleet) pins inference workers per NUMA node so
+  that the model weights, the KV cache, and the worker thread
+  all live on one socket. Cross-socket access on a modern Xeon
+  costs ~2–3× the memory latency of local access; for
+  bandwidth-bound decode loops, that ratio is the difference
+  between meeting and missing TTFT SLO. The kernel-side support
+  is straightforward (`numactl`, `cpuset.mems`); the discipline
+  is in keeping the binding correct as the worker pool resizes.
+
+Three platforms, one mechanism: `cpuset` cgroups plus NUMA
+binding turn a shared multi-tenant box into something that
+behaves like a private one for the tenants that need it. The
+lab's eBPF tracing is the same observation tool the platform
+teams used to validate that the binding actually had the
+intended effect — "we set `cpuset.cpus = 0-3`" and
+"`sched_migrate_task` no longer fires across the boundary" are
+two independent signals that together close the evidence loop
+(Chapter 3 §3).
+
 ### When bpftrace is not enough
 
 bpftrace is perfect for exploration — a one-liner gets you a

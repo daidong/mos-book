@@ -5,9 +5,13 @@ integrate material from multiple chapters and are the intended
 vehicle for the second half of a semester built around this book.
 
 Each project is deliverable as a short paper plus a
-reproducibility artifact (see Chapter 13). Full project briefs
-and grading rubrics live in the `projects/` directory of the
-book repository.
+reproducibility artifact — environment script, pinned versions,
+raw data, analysis scripts, per-figure regeneration
+instructions. (Appendix C covers the environment-pinning
+mechanics; Chapter 3 §3 covers the evidence contract every
+claim in the paper has to satisfy.) Full project briefs and
+grading rubrics live in the `projects/` directory of the book
+repository.
 
 All four projects share a common shape:
 
@@ -21,7 +25,7 @@ All four projects share a common shape:
 3. **Propose and validate an intervention.** Change one thing,
    measure before/after, explain the mechanism.
 4. **Ship a reproducibility artifact.** Scripts, raw data,
-   figure-regeneration code, environment pinning (Chapter 13).
+   figure-regeneration code, environment pinning (Appendix C).
 
 Pick the project that matches your background. All four touch
 on Chapters 2–3 (measurement, tail latency); the other chapters
@@ -176,9 +180,11 @@ Every project submits:
    `templates/final-report-template.md`. Must include:
    problem, hypothesis, methodology, results, mechanism,
    limitations, future work.
-2. **A reproducibility artifact** meeting the standards of
-   Chapter 13: environment script, pinned versions, raw data,
-   analysis scripts, per-figure reproduction instructions.
+2. **A reproducibility artifact** with environment script,
+   pinned versions, raw data, analysis scripts, and per-figure
+   reproduction instructions. Use Appendix C for the
+   environment-pinning mechanics and the Chapter 3 evidence
+   contract for the claims-to-evidence mapping in the paper.
 3. **A 12–15 minute final presentation.**
 4. **A peer-reproduction report** — another team attempts to
    reproduce your headline result and submits a report using

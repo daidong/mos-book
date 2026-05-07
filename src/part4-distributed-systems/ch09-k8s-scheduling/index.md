@@ -131,7 +131,12 @@ underneath the pipeline in §9.3.
 
 When a user runs `kubectl apply -f deployment.yaml`, the Pods it
 creates land in etcd with no `nodeName`. The scheduler watches for
-exactly this condition. For each unscheduled Pod:
+exactly this condition. For each unscheduled Pod, three stages
+run in order:
+
+![Worked example of the Filter → Score → Bind pipeline. An unscheduled Pod requesting 4 CPU, 2 GiB, with a `gpu` toleration and a `zone=us-east` node affinity is matched against six cluster nodes. Filter rejects three of them on hard predicates (NodeResourcesFit, TaintToleration, NodeAffinity, VolumeBinding); Score ranks the three survivors using weighted plugins (LeastAllocated, NodeResourcesBalancedAllocation w=1, InterPodAffinity w=2) and picks Node 4 with score 82; Bind writes `spec.nodeName = Node 4` through the API server, persisting the decision through etcd Raft; the kubelet on Node 4 then watches and starts the containers.](figures/scheduler-pipeline.png)
+
+In pseudocode:
 
 ```text
 1. FILTER — which nodes can LEGALLY run this Pod?

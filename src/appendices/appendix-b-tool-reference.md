@@ -439,4 +439,7 @@ able to cite:
 
 That three-part citation is what makes a claim reviewable by
 someone who was not in the room — which is, in the end, the
-point of Chapter 13.
+point of the Chapter 3 evidence contract: every measurement
+should carry the tool that produced it, the exact invocation,
+and the raw output, so a peer can audit the chain without
+asking you to re-run anything.
