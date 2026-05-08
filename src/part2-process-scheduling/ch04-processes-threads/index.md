@@ -18,6 +18,9 @@ far below any reasonable saturation threshold. The web server's p99
 jumps to 120 ms. Nothing else changed: same code, same RPS, same
 box. Where did the extra 112 ms go?
 
+![Two stacked time-series panels covering ten minutes before and thirty minutes after a log-compaction batch job starts. Top panel: average CPU rises from about 55% to about 70% and stays well below the 80% alarm threshold. Bottom panel: p99 latency jumps from about 8 ms to about 120 ms, far above the 50 ms SLO line, with heavy variance.](figures/avg-cpu-vs-p99-incident.svg)
+*Figure 4.1: The opening incident. The CPU panel never crosses any operator's alarm threshold; the p99 panel leaves its SLO 50 ms line behind within seconds. The two panels share an x-axis so the asymmetry — calm utilization, violent tail — is visible at a glance. The traces are synthetic but the shape and magnitudes are from a production microservice incident report; reproduce with `python3 scripts/figures/gen_ch04_cpu_vs_p99.py`.*
+
 It went into a queue. Specifically, the runqueue: the kernel data
 structure where threads that are ready to run wait their turn for a
 CPU. Chapter 3 named this kind of slow path — a rare, expensive
@@ -130,7 +133,7 @@ A process moves through three main states:
   timer, futex, signal).
 
 ![Task state timeline showing SLEEPING → RUNNABLE (on runqueue, waiting) → RUNNING (on CPU), with tracepoints sched_wakeup and sched_switch marking the transitions, and scheduling latency defined as t(RUNNING) − t(RUNNABLE)](figures/task_state_timeline.png)
-*Figure 4.1: The three main process states and the transitions between them. Scheduling latency is the time spent in the RUNNABLE state — between the wakeup event and the context switch that actually delivers the CPU.*
+*Figure 4.2: The three main process states and the transitions between them. Scheduling latency is the time spent in the RUNNABLE state — between the wakeup event and the context switch that actually delivers the CPU.*
 
 Two events define the boundaries of scheduling latency. A
 `sched_wakeup` event marks the SLEEPING → RUNNABLE transition (an
@@ -371,7 +374,7 @@ functions like SJF on the latency-sensitive class. Chapter 7 picks
 this up under the name *QoS class*.
 
 ![FIFO vs SJF Gantt charts: under FIFO, one long task delays all short tasks (convoy effect); under SJF, short tasks finish first and the long task runs last](figures/badFIFO.png)
-*Figure 4.2: The convoy effect under FIFO. Short tasks wait behind a long one, inflating average turnaround time. SJF reverses the order and minimizes average wait — but only if job lengths are known in advance.*
+*Figure 4.3: The convoy effect under FIFO. Short tasks wait behind a long one, inflating average turnaround time. SJF reverses the order and minimizes average wait — but only if job lengths are known in advance.*
 
 **Round Robin (RR).** Give each task a time quantum. Preempt when
 the quantum expires and rotate. Cures starvation; the quantum choice
@@ -382,7 +385,7 @@ the quantum indirectly as `sched_min_granularity_ns` — typically
 0.75 ms on desktops, 4 ms on server tunings.
 
 ![Round Robin with 1 ms vs 100 ms time slices: shorter slices give better responsiveness for short tasks but add more context-switch overhead](figures/badFIFORR.png)
-*Figure 4.3: The quantum tradeoff in Round Robin. A 1 ms slice gives every task quick access but multiplies context switches. A 100 ms slice amortizes switch cost but delays short tasks behind long ones — converging toward FIFO behavior.*
+*Figure 4.4: The quantum tradeoff in Round Robin. A 1 ms slice gives every task quick access but multiplies context switches. A 100 ms slice amortizes switch cost but delays short tasks behind long ones — converging toward FIFO behavior.*
 
 **Multi-Level Feedback Queue (MLFQ).** Multiple priority levels,
 first described by Corbató et al. (1962) in CTSS. New tasks start
@@ -394,7 +397,7 @@ Linux 2.6.23 (Molnar, 2007) with a different idea — virtual runtime
 — that Chapter 5 covers.
 
 ![MLFQ with four priority levels: new and I/O-bound tasks enter at the top; tasks that exhaust their time slice drop to lower levels with longer slices](figures/mfq.png)
-*Figure 4.4: A four-level MLFQ. New or I/O-bound tasks start at priority 1 with short slices. CPU-hungry tasks that consume their quantum drop to lower levels with progressively longer slices. The result is automatic classification of interactive vs batch work.*
+*Figure 4.5: A four-level MLFQ. New or I/O-bound tasks start at priority 1 with short slices. CPU-hungry tasks that consume their quantum drop to lower levels with progressively longer slices. The result is automatic classification of interactive vs batch work.*
 
 A scheduler must also handle the common case where CPU-bound and
 I/O-bound tasks share the same machine. I/O-bound tasks use short
@@ -403,7 +406,7 @@ full quantum. A good scheduler lets the I/O-bound task run quickly
 when it wakes, then gives the CPU-bound task the remaining time.
 
 ![Workload mixture: one I/O-bound task issues short CPU bursts between I/O waits, while two CPU-bound tasks consume full quanta in the gaps](figures/mixture.png)
-*Figure 4.5: A mixed I/O-bound and CPU-bound workload. The I/O-bound task gets quick access on wakeup; CPU-bound tasks fill the remaining time. MLFQ and CFS both handle this well, but for different reasons.*
+*Figure 4.6: A mixed I/O-bound and CPU-bound workload. The I/O-bound task gets quick access on wakeup; CPU-bound tasks fill the remaining time. MLFQ and CFS both handle this well, but for different reasons.*
 
 ### Multi-CPU: per-CPU runqueues
 
@@ -413,7 +416,7 @@ kernels maintain a **per-CPU runqueue**, with periodic **load
 balancing** that migrates tasks when queue lengths diverge.
 
 ![Per-CPU runqueue: CPU 0 runs task X on-CPU while tasks A, B, C wait in the RUNNABLE queue; RUNNABLE is not the same as running](figures/one_cpu_one_runqueue.png)
-*Figure 4.6: One CPU, one runqueue. Task X is on-CPU; tasks A, B, C are RUNNABLE but waiting. Each additional CPU gets its own runqueue; load balancing migrates tasks between them.* This
+*Figure 4.7: One CPU, one runqueue. Task X is on-CPU; tasks A, B, C are RUNNABLE but waiting. Each additional CPU gets its own runqueue; load balancing migrates tasks between them.* This
 introduces a new axis of tension: migrations improve fairness but
 destroy cache locality. Pinning a latency-sensitive thread to a CPU
 (`taskset`, `sched_setaffinity`) reduces migrations at the cost of
@@ -508,8 +511,8 @@ argument has three parts:
 
 The consequence is the classic "CPU utilization is fine, but p99 is
 terrible" incident pattern that Dean and Barroso (2013) catalogued in
-*The Tail at Scale*. The opening scene of this chapter is one
-specific instance:
+*The Tail at Scale*. The opening scene of this chapter — the one
+Figure 4.1 visualizes — is one specific instance:
 
 > **Incident sketch.** A payment service runs on 4-core nodes at ~55 %
 > average CPU. A nightly log-compaction job starts at 02:00 and
