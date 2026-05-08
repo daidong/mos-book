@@ -28,7 +28,7 @@ device, and explains the knobs that let databases, consensus
 logs, and container runtimes make durability tradeoffs
 intentionally.
 
-## 10.1 Why File Systems Matter to Modern Systems
+## 10.1 Why do filesystems still matter?
 
 Most of this book has treated storage as somewhere data ends up.
 That treatment was fine through Chapter 9; from here on it is
@@ -49,7 +49,7 @@ latency distributions. Chapter 11 will measure those
 distributions end to end; this chapter builds the vocabulary to
 explain them.
 
-## 10.2 The VFS Abstraction
+## 10.2 How does one syscall reach many filesystems?
 
 Linux supports dozens of filesystems — ext4, xfs, btrfs, tmpfs,
 OverlayFS, NFS, FUSE — and every user program talks to them
@@ -123,7 +123,7 @@ trees (XFS) for O(log n) or O(1) lookup. Combined with the
 dentry cache, path resolution on a hot directory is effectively
 free.
 
-## 10.3 The Page Cache: Read and Write Paths
+## 10.3 What does the page cache actually buffer?
 
 The **page cache** is the kernel's file cache in RAM. Every read
 and write passes through it (unless you explicitly use
@@ -216,11 +216,19 @@ burst of device writes that interferes with the application's
 own I/O and spikes latency. Chapter 3 saw the application side
 of this (major faults); §10.5 will show the device side.
 
-## 10.4 Ext4 Internals
+## 10.4 What is inside ext4?
 
 ext4 is the default filesystem on Ubuntu, Debian, and RHEL. It
-descends from the FFS lineage (FFS → ext2 → ext3 → ext4) and
-incorporates thirty years of filesystem-design lessons.
+descends from the FFS lineage (McKusick et al., 1984; FFS →
+ext2 → ext3 → ext4) and incorporates forty years of
+filesystem-design lessons. The line of descent is worth
+naming: McKusick's *A Fast File System for UNIX* introduced
+block groups and the layout strategy ext4 still uses; Hagmann's
+*Reimplementing the Cedar File System* (1987) introduced
+write-ahead logging for crash consistency; Rosenblum &
+Ousterhout's *Log-Structured File System* (1992) took the WAL
+idea further and motivated the LSM trees of Chapter 11. The
+ext4 we run today is the synthesis.
 
 ![FFS cylinder group layout: each group contains a superblock copy, group descriptor, bitmaps, inode table, and data blocks](figures/FFS.png)
 *Figure 10.3: The FFS (Fast File System) cylinder-group layout that ext4 inherits. Keeping inodes and data blocks in the same group reduces seeks on rotational media and improves locality on SSDs.*
@@ -325,7 +333,7 @@ durability primitive: the data has to hit disk *before* the
 metadata that points at it can be committed. A crash during the
 window cannot leave you with metadata that points at garbage.
 
-## 10.5 Durability: fsync and Its Friends
+## 10.5 Why is fsync so slow, and when does it lie?
 
 ### The durability spectrum
 
@@ -390,15 +398,25 @@ caching, and some network-attached storage have all been caught
 acknowledging fsync without actually persisting the data. In
 production, test your stack: a crash consistency test (write,
 fsync, kill power, verify) is the only authoritative answer.
+Pillai et al. (2014) catalogued exactly this class of bugs at
+OSDI: their *All File Systems Are Not Created Equal* paper
+tested ten Linux filesystems against the durability assumptions
+of eleven applications, and found at least one violated
+assumption in every (filesystem, application) pair they
+examined. The paper's ALICE tool became the standard way to
+find these bugs.
 
-PostgreSQL famously had a subtle bug here (2018): it assumed
-that a failed `fsync()` meant the dirty pages were still in
-cache to retry. On some kernels, a failed `fsync` instead
-*discards* the dirty pages, silently losing the write. The
-lesson is that the contract between application and kernel
-is narrower than it looks.
+PostgreSQL famously had a subtle bug from this family in 2018
+(Corbet, *PostgreSQL's fsync() Surprise*, LWN): it assumed that
+a failed `fsync()` meant the dirty pages were still in cache to
+retry. On some kernels, a failed `fsync` instead *discards* the
+dirty pages, silently losing the write. The PG developers had
+built their durability story on a contract the kernel never
+offered. The lesson generalizes: every layer of the storage
+stack has assumptions, and they do not always match. When you
+build on top of fsync, test the actual stack.
 
-## 10.6 Write Amplification
+## 10.6 Why does the device write more than the application asked for?
 
 Your application writes 4 KB. The device writes more. The ratio
 is the **write amplification factor (WAF)**:
@@ -434,7 +452,7 @@ file into the upper layer. A 1-byte change to a 100 MB file
 costs 100 MB of I/O on first write. That is why cold-start
 container latency is sometimes dominated by disk, not CPU.
 
-## 10.7 Observability: Peering Into the Stack
+## 10.7 How do I see all of this from user space?
 
 Five tools cover almost every investigation:
 
@@ -492,14 +510,43 @@ Key takeaways from this chapter:
 
 ## Further Reading
 
-- Arpaci-Dusseau & Arpaci-Dusseau (2018). *OSTEP*, Part III
-  (Persistence). Free online.
-- McKusick, M. et al. (1984). *A fast file system for UNIX.* ACM
-  TOCS 2(3). (The FFS paper — still worth reading.)
-- Prabhakaran, V. et al. (2005). *IRON file systems.* SOSP.
-- Rodeh, O., Bacik, J., Mason, C. (2013). *BTRFS: The Linux
-  B-Tree Filesystem.* ACM TOS 9(3).
-- Linux kernel: `Documentation/filesystems/ext4.rst`.
-- PostgreSQL fsync-bug post-mortem (2018):
+### Foundational filesystem design
+
+- Arpaci-Dusseau, R. H., & Arpaci-Dusseau, A. C. (2018).
+  *Operating Systems: Three Easy Pieces.* Part III (Persistence).
+  Free online. <https://pages.cs.wisc.edu/~remzi/OSTEP/>
+- McKusick, M. K., Joy, W. N., Leffler, S. J., & Fabry, R. S.
+  (1984). "A Fast File System for UNIX." *ACM TOCS,* 2(3).
+  (The FFS paper — still worth reading.)
+- Hagmann, R. (1987). "Reimplementing the Cedar File System
+  Using Logging and Group Commit." *SOSP.* (Origin of
+  filesystem write-ahead logging.)
+- Rosenblum, M., & Ousterhout, J. K. (1992). "The Design and
+  Implementation of a Log-Structured File System." *ACM TOCS,*
+  10(1). (LFS — the conceptual ancestor of LSM trees.)
+- Ganger, G. R., et al. (2000). "Soft Updates: A Solution to
+  the Metadata Update Problem in File Systems." *ACM TOCS,*
+  18(2). (BSD's alternative to journaling.)
+- Rodeh, O., Bacik, J., & Mason, C. (2013). "BTRFS: The Linux
+  B-Tree Filesystem." *ACM TOS,* 9(3).
+
+### Crash consistency and the fsync contract
+
+- Prabhakaran, V., et al. (2005). "IRON File Systems." *SOSP.*
+  (Filesystem behavior under disk faults.)
+- Pillai, T. S., et al. (2014). "All File Systems Are Not Created
+  Equal: On the Complexity of Crafting Crash-Consistent
+  Applications." *OSDI.*
+  <https://www.usenix.org/conference/osdi14/technical-sessions/presentation/pillai>
+- Corbet, J. (2018). "PostgreSQL's fsync() Surprise." LWN.net.
+  <https://lwn.net/Articles/752063/>
+- PostgreSQL wiki: *Fsync Errors.*
   <https://wiki.postgresql.org/wiki/Fsync_Errors>
-- Jonas Bonér, *Fsyncgate:* a good non-technical summary.
+
+### Linux internals
+
+- Linux kernel: `Documentation/filesystems/ext4.rst`.
+- Linux kernel: `Documentation/filesystems/vfs.rst`.
+- Bonwick, J., & Moore, B. (2008). *ZFS: The Last Word in
+  Filesystems.* Sun Microsystems. (The end-to-end checksum
+  argument that influences modern reliability thinking.)

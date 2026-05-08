@@ -50,7 +50,7 @@ three `appendfsync` policies.
 ### A.0 Predict before you measure
 
 Using only your fsync numbers from Lab 10 (Chapter 10) and the
-AOF semantics from Chapter 11 §11.3, write the following
+AOF semantics from Chapter 11 §11.4, write the following
 prediction in your report:
 
 > *"At pipeline depth 1, `appendfsync no` will sustain ____

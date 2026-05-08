@@ -15,16 +15,28 @@
 > - Explain object-storage design: immutable objects, flat
 >   keyspaces, and erasure coding for space-efficient durability
 
+A team is shipping a feature that needs to remember a user's
+shopping cart across sessions. Three engineers walk in with three
+answers: "put it in Redis with AOF every-second", "give it its
+own 3-node etcd", "write each cart as an object to S3". All
+three work. They differ by a factor of 10 000× in latency,
+10 000× in cost per GB, and produce three completely different
+failure modes when the network breaks. The decision is real,
+the tradeoffs are real, and the fact that all three engineers
+are correct *somewhere* is the topic of this chapter.
+
 Chapter 10 made a single machine's storage stack concrete —
 `write()` into the page cache, `fsync()` to disk, ext4 journal
 underneath. Chapter 11 stretches that stack across machines. The
-unifying question: **given an application that needs to persist
-data, where on the storage spectrum does it belong?** Different
-answers sit at different points on the same axes (latency,
-durability, consistency, cost per GB), and the systems in this
-chapter — etcd, Redis, S3/MinIO — are carefully placed landmarks.
+unifying question is the one those three engineers were
+implicitly answering: **given an application that needs to
+persist data, where on the storage spectrum does it belong?**
+Different answers sit at different points on the same axes
+(latency, durability, consistency, cost per GB), and the systems
+in this chapter — etcd, Redis, S3/MinIO, and the LSM-based stores
+that sit between them — are carefully placed landmarks.
 
-## 11.1 The Storage Spectrum
+## 11.1 Where on the spectrum does each system sit?
 
 Storage systems span many orders of magnitude across every
 relevant dimension:
@@ -53,7 +65,7 @@ for this one — if you want to know why etcd's write latency is 2–
 10 ms, you need all of Chapters 8 (Raft), 10 (fsync + journal),
 and the numbers from Chapter 2 (SSD vs DRAM).
 
-## 11.2 CAP in Practice
+## 11.2 What does CAP actually mean during a partition?
 
 In a distributed system, you cannot simultaneously guarantee all
 three of:
@@ -130,7 +142,7 @@ Redis pays nothing extra in the steady state but pays the
 table-row above when the network breaks. The CAP theorem is the
 framework; the partition trace is the price tag.
 
-## 11.3 etcd: WAL + bbolt
+## 11.3 How does etcd land Raft on ext4?
 
 You already know etcd's replication layer from Chapter 8. Its
 on-disk format is the other half.
@@ -190,7 +202,7 @@ the noise on same-region clusters. That is why Kubernetes
 production guidance calls for dedicated fast SSDs for etcd and
 warns against running etcd on congested disks.
 
-## 11.4 Redis Durability: RDB and AOF
+## 11.4 How does Redis trade durability for throughput?
 
 Redis occupies a different point on the spectrum: primary
 storage is RAM, and durability is *optional*. Two complementary
@@ -257,7 +269,7 @@ this directly.
 - Most production Redis runs **both**: AOF for precision, RDB
   for fast startup and external backup.
 
-## 11.5 Object Storage: S3 and MinIO
+## 11.5 What is different about object storage?
 
 A third, different design point: **object storage**.
 
@@ -307,28 +319,6 @@ the same key; the old object is logically gone (and physically
 reclaimed by garbage collection). **Versioning** is implemented
 by keeping all old versions around and indexing them separately.
 
-### LSM trees and append-first storage
-
-Between the in-memory world of Redis and the replicated metadata
-store of etcd sits another major design family: **Log-Structured
-Merge trees (LSM)**. Systems like RocksDB, LevelDB, Cassandra, and
-TiKV use this pattern.
-
-The idea: writes go first to an in-memory buffer (the **memtable**).
-When the memtable fills, it is flushed to disk as a sorted,
-immutable file (an **SSTable**). Background **compaction** merges
-overlapping SSTables to reclaim space and keep read amplification
-bounded.
-
-![LSM tree lifecycle: writes to memtable, flush to L0 SSTables, compaction merges levels, reads check memtable then each level](figures/week10b-lsm-life.svg)
-*Figure 11.4: The LSM lifecycle. Writes are always sequential (append to memtable, flush to SSTable). Reads may check multiple levels. Compaction is the background tax that keeps the system healthy — and is the primary source of write amplification and tail-latency spikes in LSM-based stores.*
-
-LSM trees trade read amplification (checking multiple levels) for
-write throughput (all writes are sequential). Compaction is the
-ongoing cost: it rewrites data that has not changed, consuming I/O
-bandwidth and CPU. Heavy compaction under load is the LSM equivalent
-of ext4 journal contention — it inflates p99 for the same reason.
-
 ### Multipart upload and large objects
 
 A single 5 TB object cannot be uploaded as one HTTP request.
@@ -345,9 +335,49 @@ possible because:
 - Large sequential I/O — no small random writes.
 - Tiered storage (hot / warm / cold / glacier) with the system
   migrating objects based on access patterns.
-- Erasure coding (§11.6) for space-efficient durability.
+- Erasure coding (§11.7) for space-efficient durability.
 
-## 11.6 Erasure Coding
+## 11.6 LSM trees: write everything sequentially, sort it later
+
+Between the in-memory world of Redis and the replicated
+metadata store of etcd sits another major design family:
+**Log-Structured Merge trees (LSM)** (O'Neil, Cheng, Gawlick, &
+O'Neil, 1996). Systems like RocksDB, LevelDB, Cassandra
+(Lakshman & Malik, 2010), and TiKV use this pattern. Bigtable
+(Chang et al., 2006) and HBase brought it into the
+distributed-systems mainstream; CockroachDB and TiKV layer
+Raft on top of RocksDB to combine LSM throughput with strong
+consistency.
+
+The idea: writes go first to an in-memory buffer (the
+**memtable**). When the memtable fills, it is flushed to disk
+as a sorted, immutable file (an **SSTable**, the format Bigtable
+introduced). Background **compaction** merges overlapping
+SSTables to reclaim space and keep read amplification bounded.
+
+![LSM tree lifecycle: writes to memtable, flush to L0 SSTables, compaction merges levels, reads check memtable then each level](figures/week10b-lsm-life.svg)
+*Figure 11.4: The LSM lifecycle. Writes are always sequential (append to memtable, flush to SSTable). Reads may check multiple levels. Compaction is the background tax that keeps the system healthy — and is the primary source of write amplification and tail-latency spikes in LSM-based stores.*
+
+LSM trees trade read amplification (checking multiple levels)
+for write throughput (all writes are sequential). Compaction
+is the ongoing cost: it rewrites data that has not changed,
+consuming I/O bandwidth and CPU. Heavy compaction under load
+is the LSM equivalent of ext4 journal contention — it inflates
+p99 for the same reason. The Lab 11 etcd-compaction experiment
+in Part C is the chapter's compact (so to speak) way to
+reproduce this on real production code.
+
+The lineage that brought LSM to mainstream production is
+worth knowing. Rosenblum & Ousterhout's LFS (Chapter 10
+Further Reading) was the operating-systems precursor:
+append-only, sort-as-you-go, compact in the background. The
+O'Neil paper showed that the same idea could give a
+database a constant number of writes per insert regardless of
+working-set size. Bigtable shipped it at planet scale; LevelDB
+(Google's open-source clone) and RocksDB (Facebook's high-write
+fork) made it the default choice for a generation of databases.
+
+## 11.7 How does erasure coding beat replication?
 
 Replication is the obvious durability strategy: store three
 copies on three nodes, tolerate any one failure. Cost: 3× the
@@ -386,7 +416,7 @@ This is the reason S3's durability quote is "11 nines" — erasure
 coding plus multi-zone placement means the expected annual loss
 is vanishingly small even at exabyte scale.
 
-## 11.7 Connecting the Stack
+## 11.8 Putting the stack back together
 
 A single Kubernetes write trace, from keyboard to SSD:
 
@@ -458,16 +488,60 @@ Key takeaways from this chapter:
 
 ## Further Reading
 
-- Ongaro, D. & Ousterhout, J. (2014). *In Search of an
-  Understandable Consensus Algorithm (Raft).* USENIX ATC '14.
-- DeCandia, G. et al. (2007). *Dynamo: Amazon's highly available
-  key-value store.* SOSP '07.
-- Calder, B. et al. (2011). *Windows Azure Storage.* SOSP '11.
-- Rashmi, K. V. et al. (2014). *A "Hitchhiker's" Guide to Fast
+### Foundational distributed-storage papers
+
+- Ghemawat, S., Gobioff, H., & Leung, S.-T. (2003). "The Google
+  File System." *SOSP.* (The paper S3 and MinIO descend from.)
+- Chang, F., et al. (2006). "Bigtable: A Distributed Storage
+  System for Structured Data." *OSDI.* (The SSTable format and
+  the LSM-on-GFS pattern.)
+- DeCandia, G., et al. (2007). "Dynamo: Amazon's Highly Available
+  Key-Value Store." *SOSP.* (Eventual consistency, consistent
+  hashing, vector clocks.)
+- Lakshman, A., & Malik, P. (2010). "Cassandra: A Decentralized
+  Structured Storage System." *ACM SIGOPS OSR.*
+- Calder, B., et al. (2011). "Windows Azure Storage: A Highly
+  Available Cloud Storage Service with Strong Consistency."
+  *SOSP.*
+- Brewer, E. (2012). "CAP Twelve Years Later: How the 'Rules'
+  Have Changed." *IEEE Computer,* 45(2).
+
+### LSM trees and write-optimized storage
+
+- O'Neil, P., Cheng, E., Gawlick, D., & O'Neil, E. (1996). "The
+  Log-Structured Merge-Tree (LSM-Tree)." *Acta Informatica,*
+  33(4). (The original LSM paper.)
+- Sears, R., & Ramakrishnan, R. (2012). "bLSM: A General Purpose
+  Log Structured Merge Tree." *SIGMOD.*
+- Dong, S., et al. (2017). "Optimizing Space Amplification in
+  RocksDB." *CIDR.* (Facebook's published RocksDB tuning notes.)
+- Luo, C., & Carey, M. J. (2020). "LSM-based storage techniques:
+  a survey." *VLDB Journal.*
+
+### Consensus and replication
+
+- Ongaro, D., & Ousterhout, J. (2014). "In Search of an
+  Understandable Consensus Algorithm." *USENIX ATC.* (Raft;
+  cross-reference Chapter 8.)
+- Lamport, L. (1998). "The Part-Time Parliament." *ACM TOCS,*
+  16(2).
+
+### Erasure coding
+
+- Reed, I. S., & Solomon, G. (1960). "Polynomial codes over
+  certain finite fields." *Journal of SIAM,* 8(2). (The
+  original Reed-Solomon paper.)
+- Rashmi, K. V., et al. (2014). "A 'Hitchhiker's' Guide to Fast
   and Efficient Data Reconstruction in Erasure-Coded Data
-  Centers.* SIGCOMM '14.
+  Centers." *SIGCOMM.*
+- Plank, J. S. (2013). "Erasure Codes for Storage Systems: A
+  Brief Primer." *USENIX ;login:.*
+
+### System documentation
+
 - Redis documentation: *Persistence.*
   <https://redis.io/docs/management/persistence/>
-- etcd docs: <https://etcd.io/docs/>
-- MinIO docs: <https://min.io/docs/>
-- Brewer, E. (2012). *CAP twelve years later.* IEEE Computer.
+- etcd documentation: <https://etcd.io/docs/>
+- MinIO documentation: <https://min.io/docs/>
+- AWS S3 documentation: *Strong consistency for read-after-write.*
+  <https://aws.amazon.com/s3/consistency/>
