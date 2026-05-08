@@ -12,17 +12,43 @@
 >   `nr_throttled` counters
 > - Explain memory OOM behavior and kubelet eviction signals
 
-Chapter 6 ended with cgroups and namespaces — the Linux primitives
-for isolation. Kubernetes is the next layer up: a declarative
-interface for expressing which processes should run, on which node,
-with which resource budget. From the kernel's perspective, nothing
-new happens; `kubelet` translates Pod specs into exactly the cgroup
-writes you performed by hand in the previous lab. What Kubernetes
-adds is a cluster-wide control plane that decides *where* to
-enforce, not *how*. This chapter walks the translation, and the lab
-lets you watch it happen.
+Run the following on any Kubernetes cluster:
 
-## 7.1 From Cgroups to Kubernetes
+```bash
+$ kubectl apply -f - <<YAML
+apiVersion: v1
+kind: Pod
+metadata: { name: demo }
+spec:
+  containers:
+  - name: app
+    image: alpine
+    command: ["sleep","3600"]
+    resources:
+      requests: { cpu: "200m", memory: "64Mi" }
+      limits:   { cpu: "500m", memory: "128Mi" }
+YAML
+```
+
+Now find the Pod's cgroup on its node and read one file:
+
+```bash
+$ cat /sys/fs/cgroup/kubepods.slice/.../demo*/cpu.max
+50000 100000
+```
+
+That is the entire chapter in eight characters. The YAML's
+`limits.cpu: "500m"` traveled through the API server, the scheduler,
+and the kubelet, and ended up as a write to the same `cpu.max`
+file you set by hand in the Chapter 6 lab. From the kernel's
+perspective, nothing new has happened; CFS bandwidth control will
+throttle the Pod the same way it would throttle a hand-rolled
+cgroup. What Kubernetes adds is a cluster-wide control plane that
+decides *where* to enforce, not *how*. This chapter walks the
+translation; the lab lets you watch it happen on a real `kind`
+cluster.
+
+## 7.1 From cgroups to Kubernetes
 
 Kubernetes works with three abstractions, in order of granularity:
 
@@ -41,6 +67,17 @@ and asks the container runtime (containerd, CRI-O) to launch the
 containers inside. Everything else — networking, volumes, service
 discovery — is orchestration on top of those cgroup writes.
 
+The lineage is explicit. Kubernetes was designed by engineers who
+had spent a decade building Borg, Google's internal cluster
+manager. Borg (Verma et al., 2015) was the system that introduced
+the priority-class taxonomy that became Kubernetes' QoS classes,
+the request-vs-limit distinction that became its scheduler input,
+and the eviction-on-pressure model that became kubelet's. Omega
+(Schwarzkopf et al., 2013) was the lessons-learned redesign whose
+optimistic-concurrency control loop became Kubernetes' reconciler
+pattern. The Borg paper is the single most useful background
+reading for this chapter.
+
 ![Diagram showing the translation from Pod spec YAML (requests, limits) through kubelet writes to cgroup v2 files (cpu.max, memory.max) to kernel enforcement mechanisms (CFS bandwidth, memory accounting)](figures/qos-cgroup-mapping.svg)
 *Figure 7.1: The translation chain from Pod spec to kernel enforcement. The YAML resource fields become cgroup control files; the kernel mechanisms Chapter 6 introduced do the actual work. "Kubernetes decides, kubelet translates, Linux enforces."*
 
@@ -49,7 +86,7 @@ translates, Linux enforces.** Each layer has its own job, and most
 incident investigations can be categorized by which layer owns the
 problem.
 
-## 7.2 Requests, Limits, and QoS Classes
+## 7.2 Requests, limits, and QoS classes
 
 Every container in a Pod spec can declare two resource numbers per
 resource type (CPU and memory, at minimum):
@@ -110,18 +147,20 @@ You can verify a Pod's class:
 kubectl get pod mypod -o custom-columns=NAME:.metadata.name,QOS:.status.qosClass
 ```
 
-## 7.3 CPU Throttling
+## 7.3 Why CPU throttling is a tail-latency problem
 
 When a Pod's `cpu` limit is below what it actually wants, the kernel
-enforces it through **CFS bandwidth control**. The mechanism is
-already familiar from Chapter 6: two numbers, `quota` and `period`,
-written to `cpu.max`. A Pod with `limits.cpu: "500m"` gets roughly
+enforces it through **CFS bandwidth control** (Turner, Rao, &
+Galbraith, 2010). The mechanism Turner et al. proposed and merged
+into Linux 3.2 is the one we still use: two numbers, `quota` and
+`period`, written to a cgroup's `cpu.max` file. A Pod with
+`limits.cpu: "500m"` gets
 
 ```text
 cpu.max = "50000 100000"
 ```
 
-meaning "50 ms of CPU per 100 ms period". Any CPU use above the
+meaning "50 ms of CPU per 100 ms period." Any CPU use above the
 quota during the current period is **throttled**: the scheduler
 takes the Pod's threads off-runqueue for the rest of the period and
 resumes them at the next boundary.
@@ -165,32 +204,49 @@ with other Pods on the node).
 
 ### Common traps
 
+Four traps appear repeatedly in production incident reports.
+
 - **Multi-threaded programs with tight CPU limits.** A Pod with
   `limits.cpu: "1000m"` (one CPU) running an 8-threaded JVM will
   burn its quota in 1/8 of a period and throttle for 7/8. The fix
   is either to raise the limit or to reduce thread count.
-- **`GOMAXPROCS` / runtime heuristics.** Many language runtimes
+  Indeed's *Unthrottled* engineering post (Vincent, 2019) walks
+  through one team's 78 % p99 reduction from this single change
+  and is the canonical reference.
+- **`GOMAXPROCS` and runtime heuristics.** Many language runtimes
   autosize their thread pool from the number of host CPUs, not from
   the cgroup's limit. On old kernels, a Go program in a 500 m CPU
   cgroup on a 32-core node would spawn 32 worker threads and
-  ceaselessly throttle. Newer Linux and newer runtimes (Go 1.22+)
-  read the cgroup limit; if you are stuck on old code, set
+  ceaselessly throttle. Uber's `automaxprocs` library was written
+  to fix this externally (Uber Engineering, 2017); Go 1.22+ reads
+  the cgroup limit natively. If you are stuck on older code, set
   `GOMAXPROCS` explicitly.
-- **"I am not CPU-bound."** The shape of a CPU-throttled workload
-  is that average CPU utilization is *low*, because the Pod spends
-  most of its time off-CPU. `nr_throttled` is the signal, not
-  `cpu.usage`.
+- **The 5.4-era kernel throttling bug.** Between roughly Linux 4.18
+  and 5.4, a refill-accounting bug in CFS bandwidth control caused
+  spurious throttling on workloads that were nowhere near their
+  quota — the kind of incident where `cpu.usage` and `nr_throttled`
+  both rise but the math does not add up. Phil Auld's fix landed in
+  Linux 5.4 (Corbet, 2019); if you are still on a 4.x kernel and
+  see throttling on a sub-quota Pod, this bug is the first thing to
+  rule out.
+- **"I am not CPU-bound."** A CPU-throttled workload looks like
+  *low* average CPU utilization, because the Pod spends most of its
+  time off-CPU. `nr_throttled` is the signal, not `cpu.usage`.
+  Engineers reach for `top` first and dismiss CPU as the cause; the
+  cgroup file is one `cat` away and tells the actual story.
 
-## 7.4 Memory Limits and OOM
+## 7.4 What happens when a Pod hits its memory limit?
 
-Memory enforcement is more brutal. `limits.memory` becomes
-`memory.max`, and when the cgroup's usage would exceed it, the
-kernel:
+Memory enforcement is more brutal than CPU enforcement. CPU
+throttling makes a process wait; memory enforcement kills it.
+`limits.memory` becomes `memory.max`, and when the cgroup's usage
+would exceed it, the kernel:
 
 1. Attempts to reclaim pages (write dirty ones back, drop clean
-   cache).
-2. If reclaim cannot find enough, invokes the cgroup OOM killer,
-   which kills a process in the cgroup.
+   cache). This is the same reclaim path Chapter 3 walked through
+   for the order-service incident.
+2. If reclaim cannot find enough, invokes the cgroup OOM killer
+   (Arcangeli & Hansen, 2010), which kills a process in the cgroup.
 3. Updates `memory.events`: `oom` increments whenever the OOM
    killer runs in this cgroup; `oom_kill` increments per
    process killed.
@@ -241,41 +297,38 @@ tells the same story: `memory.current` climbed to `memory.max`,
 `memory.events:oom` incremented, the kernel killed the largest
 process in the cgroup. Raise the limit or reduce the working set.
 
-## 7.5 Kubelet Eviction
+## 7.5 How does kubelet evict before the kernel does?
 
-Before the kernel OOM killer runs, `kubelet` tries to handle memory
-pressure proactively. It monitors **node-level signals** and, when
-thresholds are crossed, evicts Pods in order of QoS class and
-resource usage.
+The kernel OOM killer is a last resort. Before it runs, the kubelet
+tries to handle node-level pressure proactively by *evicting* Pods
+— stopping them gracefully and rescheduling them to other nodes.
+Eviction is the orderly path; node OOM is what happens when
+eviction is too slow.
 
-Key signals (all exposed by `kubelet --v=4` and by summary metrics):
+Kubelet monitors four node-level signals (all exposed at
+`/metrics/resource` and visible at `kubelet --v=4`):
 
 - `memory.available` — free memory on the node
 - `nodefs.available` — free disk on the node's filesystem
 - `imagefs.available` — free disk on the container image store
 - `pid.available` — PID headroom
 
-Each has **soft** and **hard** eviction thresholds:
+Each signal carries **soft** and **hard** eviction thresholds. A
+soft threshold triggers eviction after a grace period, allowing
+Pods to shut down cleanly; a hard threshold evicts immediately
+(less graceful, but it avoids sliding into node OOM).
 
-- A **soft** threshold triggers eviction after a grace period,
-  allowing Pods to shut down cleanly.
-- A **hard** threshold evicts immediately — less graceful, but
-  avoids sliding into node OOM.
+The eviction order is the production interpretation of the QoS
+table from §7.2: BestEffort Pods using the most of the pressured
+resource go first, then Burstable Pods above their request, then
+Burstable Pods below request, and Guaranteed Pods only as a last
+resort — typically because the `system-reserved` slice itself
+overran. This ordering lets capacity planning be a conversation
+about QoS class: workloads that must survive pressure get
+`requests == limits` and become Guaranteed; background batch work
+gets no resource fields and stays BestEffort and cheap.
 
-Eviction order:
-
-1. BestEffort Pods using the most of the pressured resource.
-2. Burstable Pods exceeding their request for the pressured
-   resource.
-3. Burstable Pods below their request (last among Burstable).
-4. Guaranteed Pods — evicted only as a last resort, typically
-   because of a `system-reserved` overrun.
-
-Understanding this ordering lets you design capacity planning:
-workloads that must survive pressure should be Guaranteed;
-background batch work can be BestEffort and stay cheap.
-
-## 7.6 Where the Scheduler Fits (Forward Pointer)
+## 7.6 Why does my Pod stay Pending? (forward pointer to Chapter 9)
 
 QoS, throttling, and OOM all act on a Pod *after* it has been
 placed on a node. The placement decision itself — the Filter →
@@ -335,12 +388,52 @@ Key takeaways from this chapter:
 
 ## Further Reading
 
-- Kubernetes documentation: *Managing Resources for Containers.*
+### Lineage and design papers
+
+- Verma, A., Pedrosa, L., Korupolu, M., et al. (2015). "Large-scale
+  cluster management at Google with Borg." *EuroSys.*
+  <https://doi.org/10.1145/2741948.2741964>
+  (The QoS classes, request-vs-limit, and eviction model all come
+  from here.)
+- Schwarzkopf, M., Konwinski, A., Abd-El-Malek, M., & Wilkes, J.
+  (2013). "Omega: flexible, scalable schedulers for large compute
+  clusters." *EuroSys.* <https://doi.org/10.1145/2465351.2465386>
+- Burns, B., Grant, B., Oppenheimer, D., Brewer, E., & Wilkes, J.
+  (2016). "Borg, Omega, and Kubernetes: Lessons learned from three
+  container-management systems over a decade." *ACM Queue.*
+
+### Mechanisms (CFS bandwidth, OOM)
+
+- Turner, P., Rao, B. B., & Galbraith, M. (2010). "CPU bandwidth
+  control for CFS." *Linux Symposium.* (The original design of
+  what becomes `cpu.max` in cgroup v2.)
+- Corbet, J. (2019). "CFS bandwidth control and its imperfections."
+  LWN.net. <https://lwn.net/Articles/788367/>
+  (Coverage of Phil Auld's 5.4-era throttling fix.)
+- Arcangeli, A., & Hansen, D. (2010). "The Linux memory management
+  subsystem and the OOM killer." Linux Plumbers.
+- Kerrisk, M. "Cgroup v2." LWN.net series, 2014–2016, indexed at
+  <https://lwn.net/Articles/679786/>.
+
+### Production folklore
+
+- Vincent, B. (2019). "Unthrottled: Fixing CPU Limits in the
+  Cloud." Indeed Engineering Blog.
+- Uber Engineering (2017). *automaxprocs: cgroup-aware
+  GOMAXPROCS for Go.* <https://github.com/uber-go/automaxprocs>
+- Lyft Engineering (2021). "Kubernetes load balancing and CPU
+  limits." (One of several public post-mortems on Kubernetes
+  CPU-limit pitfalls.)
+
+### Kubernetes documentation
+
+- *Managing Resources for Containers.*
   <https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/>
-- Kubernetes documentation: *Configure Quality of Service for Pods.*
+- *Configure Quality of Service for Pods.*
   <https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/>
-- Kubernetes documentation: *Node-pressure Eviction.*
+- *Node-pressure Eviction.*
   <https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/>
+- *Scheduling Framework.*
+  <https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/>
 - Gregg, B. (2020). *Systems Performance*, 2nd ed. Chapter 11:
   Cloud Computing.
-- kube-scheduler framework: <https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/>

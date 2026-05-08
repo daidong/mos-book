@@ -26,9 +26,9 @@ registry, and networking plumbing. Source and tests live in
 
 | Command | What it adds | Chapter §
 |---|---|---|
-| `minictl chroot <rootfs> <cmd>` | filesystem isolation only | 6.5 |
-| `minictl run <rootfs> <cmd>` | namespaces (UTS, PID, MNT, USER) | 6.2, 6.6 |
-| `minictl run --mem-limit --cpu-limit …` | cgroup v2 resource caps | 6.4 |
+| `minictl chroot <rootfs> <cmd>` | filesystem isolation only | 6.4 |
+| `minictl run <rootfs> <cmd>` | namespaces (UTS, PID, MNT, USER) | 6.2, 6.5 |
+| `minictl run --mem-limit --cpu-limit …` | cgroup v2 resource caps | 6.3 |
 
 > **Important:** Do **not** open a persistent root shell
 > (`sudo -i`, `sudo bash`, etc.) during this lab. Use `sudo` on
@@ -342,7 +342,7 @@ Submit:
 
 1. **Source code** — Parts A–C applied; `make` builds without
    warnings.
-2. **`lab5_report.md`** — the narrative. Must include:
+2. **`report.md`** — the narrative. Must include:
    - One paragraph per part summarizing what you added and what
      you observed.
    - Test outputs or screenshots showing: hostname isolation, PID 1
@@ -350,6 +350,14 @@ Submit:
      `top`.
    - The Part D overhead table with interpretation.
    - A short "what surprised you?" reflection.
+   - **Ruled-out alternative.** Pick one of your overhead numbers
+     from Part D and name a plausible *competing* explanation for
+     it. For example: "the namespaces row could be slow because of
+     `clone` itself, not the namespace flags." Then cite one
+     measurement that excludes the alternative — for example, a
+     `time strace -c` showing where the per-invocation seconds
+     actually go. One paragraph; the form of the argument is more
+     important than the choice of alternative.
 
 ## AI Use and Evidence Trail
 
@@ -390,13 +398,19 @@ examples in Appendix D §"The Evidence Trail"):
 | Criterion | Points |
 |---|---|
 | Predictions (Parts A–C) written before implementation | 15 |
-| Part A (chroot) works and demonstrates non-isolation | 15 |
-| Part B (namespaces) works; PID 1, hostname, rootless verified | 30 |
-| Part C (cgroups) works; memory and CPU caps enforced | 20 |
+| Part A (chroot) works and demonstrates non-isolation | 12 |
+| Part B (namespaces) works; PID 1, hostname, rootless verified | 28 |
+| Part C (cgroups) works; memory and CPU caps enforced | 18 |
 | Part D overhead measurement, with interpretation | 10 |
-| Prediction vs observation comparison; surprises explained | 10 |
+| Prediction vs observation comparison; surprises explained | 8 |
+| Ruled-out alternative for one Part D row | 9 |
 
 **Total: 100 points.**
+
+The AI-resistant components are the predictions and the ruled-out
+alternative. An LLM cannot predict per-invocation overhead on your
+specific VM, and it cannot exclude an alternative explanation
+without your `strace -c` or `perf stat` output to point to.
 
 ## Troubleshooting
 

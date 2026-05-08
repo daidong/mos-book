@@ -205,13 +205,20 @@ correlated with throttling periods.
 
 ### B.4 Explain
 
-One paragraph in the report:
+Two paragraphs in the report:
 
-- Pod's CPU limit in millicores.
-- Corresponding `cpu.max` value.
-- Growth rate of `nr_throttled`.
-- Why CPU throttling inflates tail latency specifically (Chapter 7
-  §7.3).
+1. **Mechanism.** State the Pod's CPU limit in millicores, the
+   corresponding `cpu.max` value, the growth rate of
+   `nr_throttled`, and why CPU throttling inflates tail latency
+   specifically (Chapter 7 §7.3).
+2. **Ruled-out alternative.** Name one *other* plausible
+   explanation for the inflated `nr_throttled` and exclude it
+   with one signal in your data. Candidates: noisy neighbor on
+   the kind node (other Pods competing for the host CPU); the
+   5.4-era kernel throttling bug (Corbet, 2019) if your kernel is
+   pre-5.4; a misconfigured `period`. "My kernel is 6.2 so the
+   pre-5.4 bug cannot apply" or "only one Pod is on this node, so
+   noisy-neighbor is excluded" is the form of the argument.
 
 ### Part B Checklist
 
@@ -265,13 +272,23 @@ cat <cgroup>/memory.events
 
 ### C.3 Explain
 
-Write 1–2 paragraphs:
+Write 2–3 paragraphs:
 
-- What was the memory limit and how much did the process try to
-  allocate?
-- What path did the kernel take (reclaim → kill)?
-- How does cgroup OOM differ from node-level OOM?
-- Which `restartPolicy` caused the observed `CrashLoopBackOff`?
+1. **Mechanism.** What was the memory limit and how much did the
+   process try to allocate? What path did the kernel take
+   (reclaim → kill)? How does cgroup OOM differ from node-level
+   OOM? Which `restartPolicy` caused the observed
+   `CrashLoopBackOff`?
+2. **Three independent signals.** Show that the kill is visible
+   from all three layers Chapter 7 §7.4 names — kubelet (‘Reason:
+   OOMKilled’), kernel (`dmesg` line), and cgroup
+   (`memory.events:oom_kill` incremented). "Two out of three” is
+   not enough; the rubric expects all three.
+3. **Ruled-out alternative.** A Pod can also exit with code 137
+   for non-OOM reasons — SIGKILL from the kubelet during graceful
+   shutdown timeout, for example. Cite the specific signal in your
+   data that excludes the alternative (the kernel `dmesg` OOM
+   record is usually the cleanest).
 
 ### Part C Checklist
 
@@ -370,13 +387,22 @@ examples in Appendix D §"The Evidence Trail"):
 
 | Criterion | Points |
 |---|---|
-| Part A table and interpretation | 20 |
-| Part B throttling evidence; mechanism tied to CFS bandwidth | 30 |
-| Part C OOM evidence across all three layers (kubelet, kernel, cgroup) | 30 |
+| Part A prediction (A.0) and table with interpretation | 20 |
+| Part B throttling evidence; mechanism tied to CFS bandwidth | 22 |
+| Part B ruled-out alternative | 8 |
+| Part C OOM evidence across all three layers (kubelet, kernel, cgroup) | 22 |
+| Part C ruled-out alternative for the 137 exit code | 8 |
 | Clear narrative linking symptoms to Chapter 7 mechanisms | 20 |
 | **Optional** Part D eviction ordering | +10 bonus |
 
 **Total: 100 points (+10 bonus).**
+
+The AI-resistant components are the predictions and the
+ruled-out alternatives. An LLM will happily invent a plausible
+mechanism paragraph; it cannot fabricate the specific
+`memory.events` snapshot from your kind node, and it cannot
+exclude the 5.4-era CFS throttling bug without your `uname -r`
+output.
 
 ## Common Pitfalls
 

@@ -13,20 +13,30 @@
 > - Describe the role of `pivot_root` and OverlayFS in filesystem
 >   isolation
 
-Chapter 5 ended at the boundary of a single machine. This chapter
-stays inside the same machine but shrinks the unit of isolation:
-from "all processes share everything" to "each container sees a
-private system view". The surprise, if you have not seen it before,
-is that a container is *not* a new kind of object. It is an
-ordinary Linux process that has been given two things: a restricted
-view (namespaces) and a resource budget (cgroups). The container
-runtime is just a small program that composes them.
+Solomon Hykes demoed Docker on a hotel-room laptop at PyCon US in
+March 2013, in five minutes that changed how an industry packaged
+software (Hykes, 2013). What he was demonstrating was not new
+technology — every primitive he used had shipped in the Linux
+kernel by 2008. What was new was the idea that the existing
+primitives, composed by a small userspace runtime and a layered
+image format, were enough to give every developer a private
+userspace on a shared kernel.
 
-## 6.1 What Is a Container?
+So: what *are* those primitives, and how does composing them turn
+an ordinary Linux process into something a developer recognizes as
+a container? The surprise, if you have not seen it before, is that
+a container is *not* a new kind of object. It is an ordinary Linux
+process that has been given two things: a restricted view
+(namespaces) and a resource budget (cgroups). The container runtime
+is a small program that composes them.
 
-A container is not a VM. A VM emulates hardware and runs its own
-kernel; a container shares the host kernel. The boundary of a
-container is not a hypervisor — it is a collection of kernel
+## 6.1 What is a container, and where did it come from?
+
+The one-line answer is that a container is an ordinary Linux
+process given (a) a restricted view of kernel resources and (b) a
+resource budget. It is not a VM. A VM emulates hardware and runs
+its own kernel; a container shares the host kernel. The boundary
+of a container is not a hypervisor — it is a collection of kernel
 mechanisms applied to the processes inside.
 
 Two mechanisms do almost all of the work:
@@ -39,13 +49,64 @@ Two mechanisms do almost all of the work:
 
 Everything else — images, registries, image layers, Kubernetes —
 builds on top of those two primitives. Liz Rice's "Containers from
-Scratch" talk makes the point with a hundred lines of Go; the lab at
-the end of this chapter makes the point with a few hundred lines of
-C. When you can build a container runtime from `clone()` and
-cgroup writes, you stop thinking of containers as magic.
+Scratch" talk makes the point with a hundred lines of Go (Rice,
+2020); the lab at the end of this chapter makes the point with a
+few hundred lines of C. When you can build a container runtime from
+`clone()` and cgroup writes, you stop thinking of containers as
+magic.
+
+### A short history of one idea
+
+The history matters because it shows that containers are the
+latest stop on a long lineage of "private system view" mechanisms,
+not a Docker invention. Five waypoints:
+
+- **`chroot` (1979).** Bell Labs Version 7 Unix introduced
+  `chroot` to give a process a private root directory. It is still
+  the primitive that the modern `pivot_root` is built on.
+- **FreeBSD jails (2000).** Kamp and Watson's *Jails: Confining the
+  omnipotent root* (Kamp & Watson, 2000) extended `chroot` with
+  process-table and network isolation — the first system to call
+  the resulting unit a "container" in spirit.
+- **Solaris Zones (2004).** Price and Tucker's design (Price &
+  Tucker, 2004) generalized jails into a full multi-tenant
+  abstraction with resource controls.
+- **Linux namespaces (2002–2013).** Eric Biederman's *Multiple
+  Instances of the Global Linux Namespaces* (Biederman, 2006) and
+  Pavel Emelyanov's PID-namespace work brought Linux into
+  parity. The user namespace, the trickiest one, landed in Linux
+  3.8 in 2013 — the same year Docker shipped, which is not a
+  coincidence.
+- **Cgroups (2007).** Paul Menage's *Adding Generic Process
+  Containers to the Linux Kernel* (Menage, 2007) added the resource
+  side of the equation. Tejun Heo's cgroup v2 unification
+  (Linux 4.5, 2016) is what we use today.
+
+Docker's contribution was not the kernel mechanism. It was a
+packaging format (image layers), a distribution model (registries),
+and a developer-facing CLI that made the assembled stack accessible
+to people who had never read `man 7 namespaces`. The Open Container
+Initiative's runtime and image specs (OCI, 2015) later codified the
+result so that runc, containerd, CRI-O, and Podman could
+interoperate.
 
 ![A container is a normal Linux process with two additions: namespaces restricting its view of system resources, and cgroups limiting how much it can consume](figures/container_is_process.svg)
 *Figure 6.1: A container is an ordinary process. Namespaces restrict what it can see; cgroups restrict what it can use. There is no "container" kernel object — the isolation is built from the same process mechanisms Chapter 4 introduced.*
+
+The kernel's record of "which container is this process in" is
+three pointers in `task_struct`: `nsproxy` (which namespaces),
+`cred` (UID, GID, capabilities), and `cgroups` (which cgroup).
+When `clone()` creates a child with `CLONE_NEW*` flags, the kernel
+copies the parent's `nsproxy`, swaps in the new namespace objects,
+and attaches the result to the child. Different tasks sharing
+`nsproxy` see the same namespaces; different tasks with different
+`nsproxy`s do not. That is the entire mechanism. Two processes are
+"in the same container" iff their `nsproxy`, `css_set`, and
+relevant `cred` all match — a property you can verify by reading
+`/proc/<pid>/ns/` and `/proc/<pid>/cgroup`.
+
+![task_struct fields that implement container identity: nsproxy points to namespace objects, cred holds credentials, cgroups points to cgroup memberships](figures/process_pointers.svg)
+*Figure 6.2: The kernel's view of a container is just three pointers in `task_struct`. `nsproxy` determines which namespaces the process sees; `cred` determines its capabilities; `cgroups` determines its resource budget. Docker, Kubernetes, and Podman all use these same three pointers; they differ in how they arrange the runtime, not in what the kernel sees.*
 
 > **Key insight:** Containers do not add new OS abstractions; they
 > partition existing ones. PID namespaces partition the process
@@ -54,12 +115,14 @@ cgroup writes, you stop thinking of containers as magic.
 > container feature becomes "oh, a new namespace" or "oh, a new
 > cgroup controller".
 
-## 6.2 Linux Namespaces
+## 6.2 What does each namespace isolate?
 
-Linux currently has **seven namespace types** (eight if you count
-the `time` namespace, which is newer and rarely relevant to this
-book). Each gets its own section of `man 7 namespaces`; for this
-book, the one-line summaries are enough:
+Linux currently has **seven namespace types** that matter in
+practice (eight if you count `time`, added in Linux 5.6, which is
+rarely relevant to this book). Each landed in a different kernel
+release over the decade-long buildout that Biederman (2006)
+started; `man 7 namespaces` carries the full history. For
+operational work, the one-line summaries are enough:
 
 | Namespace | What it isolates |
 |---|---|
@@ -104,7 +167,7 @@ unshare --user --map-root-user /bin/bash
 ```
 
 The last example is the heart of rootless containers, which
-Section 6.6 covers.
+§6.5 covers.
 
 ### Inspecting namespaces: `/proc/<pid>/ns/`
 
@@ -124,55 +187,33 @@ lrwxrwxrwx 1 dong dong 0 uts    -> 'uts:[4026531838]'
 ```
 
 Two processes are in the same namespace iff their symlinks point at
-the same inode number. This is how `nsenter` works: open one of
-these files, call `setns()` to join, and you are inside the
-container — no Docker necessary.
+the same inode number. This is also how `nsenter` works: it opens
+one of these files, calls `setns()` to join the namespace, and
+leaves you inside the container with no Docker daemon involved.
+This is the operational definition of "running a process inside a
+container" — it has nothing to do with Docker as such.
 
-## 6.3 The `task_struct` and Container Identity
+## 6.3 Cgroups v2
 
-The kernel does not have a `container` data structure. What it has
-is a `task_struct` (the process control block from Chapter 4) with a
-pointer called `nsproxy`:
-
-```c
-struct task_struct {
-    ...
-    struct nsproxy *nsproxy;   // the namespaces this task is in
-    struct cred    *cred;      // credentials — UID/GID, capabilities
-    struct css_set *cgroups;   // cgroup memberships
-    ...
-};
-```
-
-`nsproxy` points at a struct that references each of the namespace
-types. When you create a new namespace via `clone`, the kernel
-copies the parent's `nsproxy`, replaces the relevant entries with
-new namespace objects, and attaches the result to the child.
-Different tasks sharing `nsproxy` see the same namespaces; different
-tasks with different `nsproxy`s do not. That is the entire
-mechanism.
-
-![task_struct fields that implement container identity: nsproxy points to namespace objects, cred holds credentials, cgroups points to cgroup memberships](figures/process_pointers.svg)
-*Figure 6.2: The kernel's view of a container is just three pointers in `task_struct`. `nsproxy` determines which namespaces the process sees; `cred` determines its capabilities; `cgroups` determines its resource budget. Different runtime tools compose these pointers differently, but the kernel mechanism is the same.*
-
-Container identity, then, is not a separate concept. A "container"
-is the set of tasks sharing an `nsproxy` (and, typically, a
-`css_set`). You can confirm this by noting that Kubernetes, Docker,
-and Podman all use exactly the same kernel facilities — they differ
-only in how they arrange the runtime, not in what the kernel sees.
-
-## 6.4 Cgroups v2
-
-Where namespaces answer "what can this process see?", **cgroups**
-answer "how much can this process use?". A cgroup is a node in a
+Namespaces handle visibility. The other half of the container story
+is quantity: how much CPU, memory, or I/O is the process allowed to
+consume? That is the **cgroups** subsystem. A cgroup is a node in a
 tree; controllers attached to the tree enforce resource limits and
 collect accounting data for every process in the subtree rooted at
 that node.
 
-Cgroup v1 had separate hierarchies per controller and was a mess to
-reason about. **Cgroup v2** unifies everything into one hierarchy
-under `/sys/fs/cgroup`, which is the only version this book uses.
-All modern kernels and container runtimes support it.
+Cgroups began in 2007 as Paul Menage's *generic process containers*
+at Google (Menage, 2007), driven by Borg's need to bin-pack jobs
+onto shared machines. The original v1 design grew separate
+hierarchies per controller — a permissive structure that turned out
+to be a maintenance disaster, with controllers fighting over how to
+delegate, account, and migrate. Tejun Heo led a multi-year
+redesign that culminated in **cgroup v2**: one unified hierarchy
+under `/sys/fs/cgroup`, merged into Linux 4.5 in 2016. Cgroup v2 is
+the only version this book uses; v1 still exists in the kernel for
+backward compatibility, but every modern container runtime
+(systemd, containerd, CRI-O, Docker on systemd-cgroup) defaults to
+v2.
 
 ### The filesystem interface
 
@@ -240,7 +281,7 @@ The mechanism differs per controller:
 All of this is kernel code. The runtime is just a userspace program
 that arranges the right writes.
 
-## 6.5 Filesystem Isolation
+## 6.4 How does a container get its own filesystem?
 
 Mount namespaces give a process a private mount tree, but that is
 not enough to make a container. The container also needs:
@@ -293,8 +334,17 @@ filesystem that composes these: a *lowerdir* (read-only, possibly
 many stacked), an *upperdir* (writable), and a *merged* view that
 reads from the upper layer when present and falls back to the
 lowers. Writes copy the modified file into the upper layer
-(copy-on-write) — which is why starting a container feels instant:
-you are reusing the same lower layers Docker cached yesterday.
+(copy-on-write).
+
+The idea predates OverlayFS. Plan 9 had union directories in the
+1990s; Linux had several earlier attempts (UnionFS, AUFS) that
+Docker initially used but never made it into the mainline kernel.
+Miklos Szeredi's OverlayFS was merged in Linux 3.18 (December 2014)
+and quickly became the standard storage driver for every major
+container runtime. The reason starting a container feels instant is
+this layer reuse: the lower layers have been cached on the host
+since the previous `docker pull`, so the per-container cost is
+just the upper layer plus the cgroup setup.
 
 ![OverlayFS layers: read-only lower layers stacked with a writable upper layer, merged into a single unified view; writes copy files into the upper layer](figures/overlayfs_layers.svg)
 *Figure 6.3: OverlayFS composes read-only image layers with a writable upper layer. Reads fall through to the first layer that has the file; writes copy the file into the upper layer (copy-on-write). This is why starting a container is fast: the lower layers are shared and cached.*
@@ -315,7 +365,7 @@ end-to-end.
 ![Container creation timeline: parent calls clone with namespace flags, writes UID map and cgroup limits; child calls pivot_root, mounts /proc, then exec's the user command](figures/container_create_timeline.svg)
 *Figure 6.4: The container creation timeline. The parent process orchestrates namespace and cgroup setup; the child enters the isolated environment and exec's the workload. The entire sequence is ordinary syscalls — no hypervisor, no special kernel module.*
 
-## 6.6 Rootless Containers
+## 6.5 What does "rootless" actually buy you?
 
 A container whose processes think they are root but are not actually
 root on the host is called **rootless**. It is a dramatic security
@@ -360,40 +410,68 @@ unprivileged caller.
 
 User namespaces do not remove the shared-kernel threat. A kernel bug
 that bypasses the namespace check — and several such bugs have been
-CVE'd over the years — gives an attacker whatever privilege the
-kernel allows. Rootless containers also add attack surface (more
-kernel code exposed to unprivileged callers), and every few years a
-new class of "user namespace escape" appears.
+CVE'd over the years (CVE-2022-0185, CVE-2022-0492, CVE-2023-0386
+are recent examples) — gives an attacker whatever privilege the
+kernel allows. Rootless containers also expand the kernel's attack
+surface to unprivileged callers, and every few years a new class of
+user-namespace-escape vulnerability appears. Walsh (2019) is the
+standard practitioner reference on the resulting threat model.
 
 The net verdict from the security community is still "yes, use
 rootless when you can". But it is not a substitute for a hypervisor
-for high-assurance isolation. When you really need hardware-level
-separation, use a VM (or a lightweight VM like gVisor or
-Kata Containers).
+for high-assurance isolation. Three projects fill the gap when you
+need stronger separation than Linux namespaces alone provide:
 
-## 6.7 Beyond Namespaces and Cgroups: seccomp and Capabilities
+- **gVisor** (Young, 2019). A user-space kernel written in Go that
+  intercepts container syscalls and re-implements them, so the
+  host kernel sees only a small attack surface. Used in Google
+  Cloud Run and App Engine.
+- **Kata Containers** (Intel × Hyper.sh, 2017–). Runs each
+  container in a lightweight VM with a real kernel. Slightly
+  heavier startup than runc, but full hardware-level isolation.
+- **Firecracker** (Agache et al., 2020). AWS's microVM monitor,
+  the substrate underneath Lambda and Fargate. Boots a guest
+  kernel in ~125 ms and exposes a 4 KB attack surface to the
+  guest — dramatically smaller than a general-purpose VMM.
+
+All three present an OCI-compatible container interface to the
+user, so they are drop-in replacements for runc when the
+threat model demands it. The tradeoff is the usual one: stronger
+isolation costs CPU, memory, and startup latency.
+
+## 6.6 Beyond namespaces and cgroups: seccomp and capabilities
 
 Namespaces and cgroups are the two primary isolation axes, but
-production runtimes add a third: **syscall filtering**.
+production runtimes add a third: **syscall filtering**. Without it,
+a compromised process inside a container has the entire kernel
+system-call surface to attack from — several hundred syscalls,
+including obscure ones that have been the source of repeated
+privilege-escalation CVEs.
 
 **Linux capabilities** split the traditional root/non-root binary
-into ~40 fine-grained permissions. A container runtime typically
-drops all capabilities except a small whitelist (`CAP_NET_BIND_SERVICE`,
-`CAP_CHOWN`, a few others). This limits what even UID 0 inside the
-container can do.
+into ~40 fine-grained permissions (Hallyn & Morgan, 2008). A
+container runtime typically drops all capabilities except a small
+allow-list — Docker's defaults include `CAP_NET_BIND_SERVICE`,
+`CAP_CHOWN`, `CAP_SETUID`, `CAP_SETGID`, and a handful of others.
+This limits what even UID 0 inside the container can do: a process
+with `CAP_NET_BIND_SERVICE` dropped cannot bind to port 80 even as
+root.
 
-**seccomp-bpf** goes further: it installs a BPF filter that runs on
-every syscall and decides whether to allow, deny, or kill. Docker's
-default seccomp profile blocks roughly 40–50 syscalls that
-containers almost never need (`mount`, `reboot`, `kexec_load`,
-various kernel-module operations). Kubernetes applies its own
-default profile starting with v1.27.
+**seccomp-bpf** (Drewry, 2012) goes further: it installs a Berkeley
+Packet Filter program that runs on every syscall and decides
+whether to allow it, deny it with `EPERM`, kill the process, or
+trap to a userspace handler. Docker's default seccomp profile
+blocks roughly 40–50 syscalls that containers almost never need
+(`mount`, `reboot`, `kexec_load`, various kernel-module
+operations); Kubernetes applies its own default profile starting
+with v1.27 (KEP-2413).
 
-For this book, the important observation is structural: namespaces
-restrict *which resources* a process sees, cgroups restrict *how
-much* it can use, and seccomp restricts *what operations* it can
-perform. Together, they form a defense-in-depth stack — each layer
-catching things the others miss.
+The structural observation is the one the chapter has been
+driving at: namespaces restrict *which resources* a process sees,
+cgroups restrict *how much* it can use, and seccomp restricts
+*what operations* it can perform. Together, they form a
+defense-in-depth stack — each layer catching things the others
+miss.
 
 ## Summary
 
@@ -420,13 +498,50 @@ Key takeaways from this chapter:
 
 ## Further Reading
 
+### Lineage and historical papers
+
+- Kamp, P.-H., & Watson, R. N. M. (2000). "Jails: Confining the
+  omnipotent root." *SANE 2000.*
+  <https://www.usenix.org/legacy/events/sane2000/full_papers/kamp/kamp_html/>
+- Price, D., & Tucker, A. (2004). "Solaris Zones: Operating System
+  Support for Consolidating Commercial Workloads." *USENIX LISA.*
+- Biederman, E. W. (2006). "Multiple Instances of the Global Linux
+  Namespaces." *Linux Symposium.*
+- Menage, P. (2007). "Adding Generic Process Containers to the
+  Linux Kernel." *Linux Symposium.*
+- Hykes, S. (2013). "The future of Linux containers." Lightning
+  talk, PyCon US 2013. (The original Docker public demo.)
+- Open Container Initiative (2015–). *Runtime and Image Format
+  Specifications.* <https://opencontainers.org/>
+
+### Tutorials and references
+
 - Kerrisk, M. (2013–2016). *Namespaces in Operation.* LWN.net series.
   Start at <https://lwn.net/Articles/531114/>.
 - Linux kernel documentation: `Documentation/admin-guide/cgroup-v2.rst`.
+- Rice, L. (2020). *Container Security.* O'Reilly Media.
+  Companion talk: *Containers from Scratch* (KubeCon).
 - Walsh, D. (2019). *Container Security.* O'Reilly Media.
-- Rice, L. *Containers from Scratch.* YouTube and her book
-  *Container Security* (O'Reilly).
-- `man 7 namespaces`, `man 7 cgroups`, `man 2 clone`, `man 2
-  unshare`, `man 2 pivot_root`.
 - Julia Evans. *What even is a container?*
   <https://jvns.ca/blog/2016/10/10/what-even-is-a-container/>
+- `man 7 namespaces`, `man 7 cgroups`, `man 2 clone`,
+  `man 2 unshare`, `man 2 pivot_root`.
+
+### Stronger isolation
+
+- Young, E., et al. (2019). "The True Cost of Containing: A gVisor
+  Case Study." *HotCloud.*
+- Agache, A., Brooker, M., et al. (2020). "Firecracker: Lightweight
+  virtualization for serverless applications." *NSDI.*
+  <https://www.usenix.org/conference/nsdi20/presentation/agache>
+- Manco, F., et al. (2017). "My VM is Lighter (and Safer) than your
+  Container." *SOSP.* (Unikernels and lightweight VMs as a
+  container alternative.)
+- Kata Containers project. <https://katacontainers.io/>
+
+### Syscall filtering
+
+- Drewry, W. (2012). "Dynamic seccomp policies (using BPF
+  filters)." LWN.net. <https://lwn.net/Articles/475043/>
+- Hallyn, S., & Morgan, A. G. (2008). "Linux Capabilities: Making
+  Them Work." *Linux Symposium.*
