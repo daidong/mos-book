@@ -16,6 +16,8 @@
 - Simulate failures (leader crash, network partition) and observe
   recovery
 - Watch follower catch-up after log divergence
+- Predict before each measurement and rule out one alternative
+  explanation grounded in your raw etcd output
 
 ## Background
 
@@ -318,11 +320,38 @@ awk '/ok/ {print $3}' write_log.txt | sort -n | tail -5
 Record: total failed writes, maximum successful-write latency
 during the outage.
 
+### D.4 Ruled-out alternative
+
+A write that fails for a few seconds during a leader crash has
+*at least three* plausible mechanisms, only one of which is the
+election itself:
+
+1. The election window itself — the cluster has no leader, so
+   nothing can be committed (Chapter 8 §8.4).
+2. Client retry / connection failure — the etcdctl client may be
+   reconnecting to a different endpoint after the old leader's
+   container disappears.
+3. WAL `fsync` stall on the *new* leader — if the new leader's
+   disk is slow, the first writes after election pay extra
+   latency unrelated to consensus.
+
+Name one of (2) or (3) as a competing explanation for your
+observed outage duration, and cite one signal in your data that
+excludes it. Useful evidence: the timestamps of `FAIL` lines
+relative to the new-leader appearance in `endpoint status`, the
+fsync time on a single-node etcd benchmark from Part C as a
+lower bound for (3), or `docker logs etcd-new-leader` showing
+the `become leader` line. "My election completed at t+1.8 s but
+FAILs continued until t+3.2 s, so retry-storm (2) is part of the
+outage; the fsync number from Part C is 4 ms, so (3) cannot
+account for the gap" is the form of the argument.
+
 ### Part D Checklist
 
 - [ ] Sustained writes script running
 - [ ] Outage window visible in the log
 - [ ] Failed-write count and max latency recorded
+- [ ] Ruled-out alternative paragraph with supporting signal
 
 ## Part E: Network Partition (Optional)
 
@@ -423,14 +452,20 @@ examples in Appendix D §"The Evidence Trail"):
 
 | Criterion | Points |
 |---|---|
-| Part A cluster + inspection | 15 |
-| Part B leader failure + re-election | 20 |
-| Part C latency comparison (1-node vs 3-node, linearizable vs serializable) | 30 |
-| Part D sustained writes across a leader crash | 20 |
-| Mechanism explanations tied to Chapter 8 | 15 |
+| Part A cluster + inspection | 12 |
+| Part B leader failure + re-election | 18 |
+| Part C prediction (in advance) and latency comparison | 25 |
+| Part D sustained writes; outage window measured | 15 |
+| Part D ruled-out alternative with supporting signal | 10 |
+| Mechanism explanations tied to Chapter 8 sections | 20 |
 | **Optional** Part E or F | +10 bonus |
 
 **Total: 100 (+10 bonus).**
+
+The AI-resistant components are the Part C prediction and the
+Part D ruled-out alternative. An LLM cannot predict your specific
+VM's WAL fsync, and it cannot exclude retry-storm without
+timestamps from your own write log.
 
 ## Cleanup
 

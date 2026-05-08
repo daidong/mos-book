@@ -12,15 +12,36 @@
 > - Compare packing vs spreading strategies and their tradeoffs
 > - Connect scheduler decisions to etcd persistence (Chapter 8)
 
+Run `kubectl get pods` on any production-sized Kubernetes
+cluster, and you almost always see at least one Pod with status
+`Pending`. Ask `kubectl describe`:
+
+```text
+Events:
+  Type     Reason            From               Message
+  ----     ------            ----               -------
+  Warning  FailedScheduling  default-scheduler  0/47 nodes are available:
+           3 node(s) had untolerated taint {dedicated: gpu},
+           14 Insufficient memory,
+           30 Insufficient cpu.
+```
+
+Three numbers, one cluster, three reasons a Pod did not get
+placed. Behind every one of those numbers is a *plugin* in the
+`kube-scheduler`'s pipeline that voted "no". Behind that pipeline
+is a 60-year tradition of cluster-resource management running
+from CTSS time-sharing through Mesos and Borg into the algorithm
+that just told this Pod to wait.
+
 Chapter 7 showed Kubernetes enforcing resources on a single node
 by turning Pod specs into cgroup writes. Chapter 8 showed etcd
 using Raft to keep cluster state consistent. This chapter puts
-them together. The question it answers is: **given a new Pod, who
-decides which node runs it, and how?** The answer is the
-`kube-scheduler`, a user-space component that does a surprisingly
-classical job — scheduling — with surprisingly modern machinery.
+them together. The question it answers is: **given a new Pod,
+who decides which node runs it, and how?** The answer is the
+`kube-scheduler`, a user-space component that does a classical
+job — scheduling — with surprisingly modern machinery.
 
-## 9.1 Why Kubernetes Is an Operating System
+## 9.1 Why is Kubernetes an operating system?
 
 A single-machine kernel schedules *threads* onto *CPUs*; Kubernetes
 schedules *Pods* onto *nodes*. The abstractions line up almost
@@ -48,7 +69,7 @@ One sentence to carry through the chapter: **Kubernetes is an
 operating system for a cluster, and `kube-scheduler` is its CPU
 scheduler with extra dimensions.**
 
-## 9.2 Control Plane Architecture
+## 9.2 What does the control plane look like?
 
 A Kubernetes cluster has a **control plane** and a pool of
 **worker nodes**. The control plane makes decisions; the workers
@@ -127,12 +148,26 @@ plane survives failures. Linearizable reads mean the scheduler
 acts on a consistent view. Raft is the silent foundation
 underneath the pipeline in §9.3.
 
-## 9.3 The Scheduler Pipeline
+## 9.3 How does the scheduler decide?
 
-When a user runs `kubectl apply -f deployment.yaml`, the Pods it
-creates land in etcd with no `nodeName`. The scheduler watches for
-exactly this condition. For each unscheduled Pod, three stages
-run in order:
+The `kube-scheduler` design is the latest in a lineage of
+cluster-resource managers, each of which solved a piece of the
+problem the next one inherited. Mesos (Hindman et al., 2011)
+introduced a two-level model where a central allocator offered
+resources to per-framework schedulers. YARN (Vavilapalli et al.,
+2013) brought the same idea to Hadoop and added per-application
+masters. Omega (Schwarzkopf et al., 2013) replaced offers with
+shared state and optimistic concurrency — the design that became
+Kubernetes' reconciler pattern. The Borg paper (Verma et al.,
+2015) consolidated a decade of Google practice into the
+request-vs-limit and QoS-class taxonomy that Kubernetes adopted
+wholesale. Burns et al. (2016) is the lessons-learned
+retrospective.
+
+With that lineage in mind: when a user runs `kubectl apply -f
+deployment.yaml`, the Pods it creates land in etcd with no
+`nodeName`. The scheduler watches for exactly this condition. For
+each unscheduled Pod, three stages run in order:
 
 ![Worked example of the Filter → Score → Bind pipeline. An unscheduled Pod requesting 4 CPU, 2 GiB, with a `gpu` toleration and a `zone=us-east` node affinity is matched against six cluster nodes. Filter rejects three of them on hard predicates (NodeResourcesFit, TaintToleration, NodeAffinity, VolumeBinding); Score ranks the three survivors using weighted plugins (LeastAllocated, NodeResourcesBalancedAllocation w=1, InterPodAffinity w=2) and picks Node 4 with score 82; Bind writes `spec.nodeName = Node 4` through the API server, persisting the decision through etcd Raft; the kubelet on Node 4 then watches and starts the containers.](figures/scheduler-pipeline.png)
 
@@ -212,7 +247,7 @@ the binding is persisted through Raft before it becomes visible.
 Kubelet watch streams on the winning node see the change and
 start the Pod.
 
-## 9.4 Scheduling Constraints
+## 9.4 How do users steer the scheduler?
 
 The filter and score plugins are parameterized by declarative
 constraints in the Pod spec.
@@ -333,7 +368,7 @@ topologySpreadConstraints:
 This is cleaner than expressing the same idea with anti-affinity,
 and it is what most production deployments use today.
 
-## 9.5 Packing vs Spreading
+## 9.5 Should I pack tightly or spread loosely?
 
 Every cluster scheduler has to pick a default orientation: pack
 Pods tightly to save money, or spread them loosely for
@@ -378,19 +413,30 @@ adds a node, descheduler migrates Pods to defrag).
 ### Backfilling: a classical response
 
 HPC schedulers have dealt with a cousin of this problem for
-decades. **Backfilling** allows the scheduler to run a smaller job
-earlier *as long as it does not delay the reserved start time of a
-head-of-line blocked job*. The reservation keeps the big job on
-track; small jobs fill the gaps.
+decades. **Backfilling**, introduced as the EASY scheduler on
+the Argonne IBM SP/2 (Lifka, 1995) and refined by Mu'alem and
+Feitelson (2001), allows the scheduler to run a smaller job
+earlier *as long as it does not delay the reserved start time of
+a head-of-line blocked job*. The reservation keeps the big job on
+track; small jobs fill the gaps. EASY backfill is still the
+default on Slurm, the workload manager that runs almost every
+large HPC cluster in 2024 (Yoo, Jette, & Grondona, 2003).
+
+More recent multi-resource cluster schedulers — Tetris (Grandl et
+al., 2014) and Quasar (Delimitrou & Kozyrakis, 2014) — generalize
+backfill into multi-dimensional bin-packing with online demand
+estimation. Sparrow (Ousterhout et al., 2013) takes the opposite
+tack: distribute the scheduling decision itself across many
+workers for sub-second latency on short jobs.
 
 The lab in this chapter has you implement FIFO and Backfill in a
 Python simulator to see the mechanism directly. Kubernetes does
 not schedule Pods exactly this way (it does not have explicit job
 reservations), but the intuition — "do not let a big pending
 request starve small feasible ones" — appears throughout real
-schedulers in the form of priority and preemption.
+schedulers in the form of priority and preemption (§9.6).
 
-## 9.6 Priority, Preemption, and the Scheduling Framework
+## 9.6 How does priority change the picture?
 
 ### PriorityClass and preemption
 
@@ -478,14 +524,65 @@ Key takeaways from this chapter:
 
 ## Further Reading
 
+### Cluster scheduler lineage
+
+- Hindman, B., et al. (2011). "Mesos: A Platform for Fine-Grained
+  Resource Sharing in the Data Center." *NSDI.*
+  (Two-level scheduling with resource offers.)
+- Vavilapalli, V. K., et al. (2013). "Apache Hadoop YARN: Yet
+  Another Resource Negotiator." *SoCC.*
+- Schwarzkopf, M., Konwinski, A., Abd-El-Malek, M., & Wilkes, J.
+  (2013). "Omega: flexible, scalable schedulers for large compute
+  clusters." *EuroSys.*
+- Verma, A., et al. (2015). "Large-scale cluster management at
+  Google with Borg." *EuroSys.*
+  <https://doi.org/10.1145/2741948.2741964>
+- Burns, B., Grant, B., Oppenheimer, D., Brewer, E., & Wilkes, J.
+  (2016). "Borg, Omega, and Kubernetes: Lessons learned from
+  three container-management systems over a decade." *CACM,*
+  59(5).
+- Isard, M., et al. (2009). "Quincy: Fair Scheduling for
+  Distributed Computing Clusters." *SOSP.*
+  (Min-cost-flow scheduling under multiple constraints.)
+
+### Fairness and multi-resource scheduling
+
+- Ghodsi, A., Zaharia, M., Hindman, B., Konwinski, A., Shenker,
+  S., & Stoica, I. (2011). "Dominant Resource Fairness: Fair
+  Allocation of Multiple Resource Types." *NSDI.*
+- Grandl, R., Ananthanarayanan, G., Kandula, S., Rao, S., &
+  Akella, A. (2014). "Multi-resource Packing for Cluster
+  Schedulers (Tetris)." *SIGCOMM.*
+- Delimitrou, C., & Kozyrakis, C. (2014). "Quasar:
+  Resource-Efficient and QoS-Aware Cluster Management."
+  *ASPLOS.*
+
+### Backfill and HPC scheduling
+
+- Lifka, D. (1995). "The ANL/IBM SP Scheduling System." *Workshop
+  on Job Scheduling Strategies for Parallel Processing (JSSPP).*
+  (The original EASY backfill paper.)
+- Mu'alem, A. W., & Feitelson, D. G. (2001). "Utilization,
+  Predictability, Workloads, and User Runtime Estimates in
+  Scheduling the IBM SP2 with Backfilling." *IEEE TPDS.*
+- Yoo, A. B., Jette, M. A., & Grondona, M. (2003). "SLURM: Simple
+  Linux Utility for Resource Management." *JSSPP.*
+
+### Distributed scheduling
+
+- Ousterhout, K., Wendell, P., Zaharia, M., & Stoica, I. (2013).
+  "Sparrow: Distributed, Low Latency Scheduling." *SOSP.*
+  (Decentralized scheduling for sub-second tasks.)
+- Karanasos, K., et al. (2015). "Mercury: Hybrid Centralized and
+  Distributed Scheduling in Large Shared Clusters." *USENIX
+  ATC.*
+
+### Kubernetes-specific
+
 - Kubernetes documentation: *Scheduling and Eviction.*
   <https://kubernetes.io/docs/concepts/scheduling-eviction/>
 - Kubernetes documentation: *Scheduling Framework.*
   <https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/>
-- Verma, A. et al. (2015). *Large-scale cluster management at
-  Google with Borg.* EuroSys '15.
-- Burns, B. et al. (2016). *Borg, Omega, and Kubernetes.*
-  CACM 59(5).
-- Ghodsi, A. et al. (2011). *Dominant Resource Fairness.* NSDI.
 - Kubernetes source tree, `pkg/scheduler/` — the actual code is
-  surprisingly readable.
+  surprisingly readable. Start at `pkg/scheduler/schedule_one.go`
+  and follow the framework extension points.

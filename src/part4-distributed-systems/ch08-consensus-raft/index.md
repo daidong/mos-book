@@ -14,18 +14,34 @@
 >   replication, majority ack, commit)
 > - Explain the latency cost of strong consistency
 
-Chapter 7 ended on a control plane — Kubernetes — that depends on
-one piece of infrastructure we treated as a black box: etcd.
-Chapter 8 opens that black box. The underlying question is simple
-to state and famously hard to answer: how do three or five
-machines agree on a sequence of values, even when some of them
-crash, some of their messages are dropped, and the network
-sometimes partitions? The answer, refined over fifty years, is
-called **consensus**. This chapter walks the classical protocol
-(Paxos), the engineered protocol (Raft), and the production
-implementation (etcd) in the same story.
+A two-line snippet from a Kubernetes incident report:
 
-## 8.1 The Consensus Problem
+```text
+14:23:07  etcd-2: lost leader, election in progress
+14:23:07  apiserver: ETCDCTL_TIMEOUT=5s exceeded; serving stale reads
+14:23:11  etcd: new leader = etcd-3, term=47
+14:23:11  apiserver: writes resumed
+```
+
+For four seconds, every `kubectl apply`, every Pod scheduling
+decision, every Deployment update in the entire cluster blocked.
+Nothing was wrong with the API server, the scheduler, the
+kubelet, or the network. The cluster simply had no quorum on
+which machine got to write the next entry to its replicated log.
+
+That is the question this chapter answers: how do three or five
+machines agree on a sequence of values, even when some crash,
+some messages are dropped, and the network occasionally splits?
+The problem is called **consensus**, and the answer was refined
+over fifty years by Lamport, Schneider, Liskov, Lynch, Ongaro,
+Ousterhout, and many others. We walk the classical protocol
+(Paxos, 1989), the engineered protocol (Raft, 2014), and the
+production implementation (etcd, 2013–) in one story — because
+etcd is exactly the component whose four-second outage held up
+the Kubernetes cluster above. Without Chapter 8, Chapter 7's
+control plane has no foundation.
+
+## 8.1 What problem is consensus solving?
 
 A single kernel on a single machine has no consensus problem. The
 process table is one `task_struct` list; the filesystem has one
@@ -102,7 +118,17 @@ invocation and its response. This is exactly what a single-node
 kernel provides naturally and what a consensus protocol provides
 across nodes — at a latency cost we will measure in the lab.
 
-## 8.2 Atomic Commit vs Consensus
+Linearizability is the consistency end of the famous CAP
+tradeoff. Brewer's CAP conjecture (Brewer, 2000) and Gilbert and
+Lynch's proof (Gilbert & Lynch, 2002) show that under a network
+partition, a system must choose between **consistency**
+(linearizable answers) and **availability** (answers at all). etcd,
+like every consensus-based system, picks consistency: a
+partitioned minority returns errors rather than stale data. The
+four-second outage in this chapter's opener is exactly that
+choice surfacing in production.
+
+## 8.2 What consensus is *not*: atomic commit
 
 Before Paxos, it is worth separating consensus from a cousin
 problem it is often confused with: **atomic commit** (2PC / 3PC).
@@ -122,13 +148,17 @@ all-or-nothing. Kubernetes, which stores all its state in a single
 etcd cluster, only needs consensus; distributed databases like
 CockroachDB use both.
 
-## 8.3 Paxos
+## 8.3 Paxos: how a majority remembers history
 
-Paxos, published by Lamport in 1998 after years of circulation,
-was the first proven-correct consensus protocol for crash-stop
-failures. It solves single-value consensus: N nodes must agree on
-one value. The replicated-log generalization (Multi-Paxos) runs
-many single-value instances, one per log slot.
+Lamport circulated *The Part-Time Parliament* (Lamport, 1998) for
+several years before it was accepted; the paper's parable framing
+was notoriously hard to read, and Lamport republished the result
+in clearer form as *Paxos Made Simple* (Lamport, 2001). The
+protocol it describes was the first proven-correct consensus
+algorithm for crash-stop failures. It solves *single-value*
+consensus: N nodes must agree on one value. The replicated-log
+generalization, Multi-Paxos, runs many single-value instances,
+one per log slot.
 
 ### Three roles
 
@@ -261,19 +291,41 @@ quorum-intersection logic is the one Paxos formalized first.
 
 The mechanism is correct but notoriously hard to implement
 faithfully. Exactly what state an acceptor persists, how a
-proposer numbers its proposals across restarts, and how Multi-Paxos
-pipelines many instances — all of these are under-specified in the
-original papers. Real-world "Paxos" implementations (Chubby,
-Spanner) are heavily modified descendants.
+proposer numbers its proposals across restarts, and how
+Multi-Paxos pipelines many instances — all of these are
+under-specified in the original papers. The canonical reference
+on what it actually takes to ship Paxos in production is *Paxos
+Made Live: An Engineering Perspective* (Chandra, Griesemer, &
+Redstone, 2007), the Google paper documenting the gap between the
+Lamport papers and Chubby, the lock service that backs almost
+every Google system. The paper is a 14-page list of issues the
+original Paxos papers do not mention: how to handle disk
+corruption, how to manage cluster membership changes, how to
+upgrade a running protocol, how to test a protocol whose bugs
+appear once a year. Spanner (Corbett et al., 2012) and Megastore
+(Baker et al., 2011) are the other heavily-engineered Paxos
+descendants in production at Google. The lesson generalizes: every
+"Paxos" you have heard of in industry is a heavily modified
+descendant, and that gap is exactly what motivated Raft.
 
-## 8.4 Raft: Consensus Made Teachable
+## 8.4 Raft: why a fresh design instead of more Paxos engineering?
 
-Ongaro and Ousterhout's 2014 paper, "In Search of an Understandable
-Consensus Algorithm", introduced **Raft**. Raft does the same job
-as Multi-Paxos but decomposes the problem into three clearly
-separated sub-problems: leader election, log replication, and
-safety. It is the consensus protocol used by etcd, Consul,
-CockroachDB, and most new systems built since 2015.
+The Chubby paper documented an industry's worth of complaints
+about Paxos: hard to teach, hard to test, hard to extend with
+membership changes. Diego Ongaro and John Ousterhout's response
+— their 2014 USENIX ATC paper *In Search of an Understandable
+Consensus Algorithm* (Ongaro & Ousterhout, 2014) — was to design a
+new protocol with *understandability* as an explicit goal. They
+ran a controlled experiment: 43 graduate students learned either
+Paxos or Raft and were quizzed on each. Raft's median quiz score
+was substantially higher, and it has dominated new consensus
+deployments since.
+
+**Raft** does the same job as Multi-Paxos but decomposes the
+problem into three clearly separated sub-problems: leader
+election, log replication, and safety. It is the consensus
+protocol used by etcd, Consul, CockroachDB, TiKV, RethinkDB, and
+most new systems built since 2015.
 
 ### Terms and leaders
 
@@ -361,12 +413,13 @@ Odd sizes are standard because even sizes pay the extra node
 without buying extra fault tolerance: 4 nodes still tolerate only
 1 failure (need 3), same as 3 nodes.
 
-## 8.5 etcd: Raft in Production
+## 8.5 etcd: what does Raft look like in production?
 
 **etcd** is a distributed key-value store that uses Raft as its
-consensus layer. Created at CoreOS in 2013, it is now a CNCF
-graduated project and, more importantly, the backing store for
-every Kubernetes cluster in the world.
+consensus layer. Created at CoreOS in 2013 and rewritten as etcd
+v3 in 2016 to use gRPC and a flat key-space (Phanishayee, 2016),
+it is now a CNCF graduated project and, more importantly, the
+backing store for every Kubernetes cluster in the world.
 
 | Property | Value |
 |---|---|
@@ -393,7 +446,10 @@ Three persistence layers matter:
 - **Snapshots.** Periodic state snapshots that let new or lagging
   followers catch up without replaying the full log.
 - **bbolt.** The actual key-value store, written to by applying
-  committed entries.
+  committed entries. bbolt is a fork of Ben Johnson's BoltDB
+  (Johnson, 2014), an embedded B+-tree key-value store inspired
+  by LMDB; etcd maintains it because BoltDB itself was archived
+  in 2018.
 
 ### Tracing a Put
 
@@ -470,7 +526,7 @@ Two layers of compaction keep etcd's footprint bounded:
   fallen too far behind is brought up to date by transferring a
   snapshot rather than replaying thousands of entries.
 
-## 8.6 The Cost of Strong Consistency
+## 8.6 What does strong consistency cost?
 
 Consensus is not free. Every write involves:
 
@@ -545,16 +601,56 @@ Key takeaways from this chapter:
 
 ## Further Reading
 
-- Ongaro, D. & Ousterhout, J. (2014). *In Search of an
-  Understandable Consensus Algorithm (Raft).* USENIX ATC '14.
-  <https://raft.github.io/raft.pdf>
-- Lamport, L. (2001). *Paxos Made Simple.*
+### Foundational papers
+
+- Lamport, L. (1998). "The Part-Time Parliament." *ACM TOCS,*
+  16(2). (The original Paxos paper.)
+- Lamport, L. (2001). "Paxos Made Simple."
   <https://lamport.azurewebsites.net/pubs/paxos-simple.pdf>
-- Fischer, M.J., Lynch, N.A. & Paterson, M.S. (1985). *Impossibility
-  of Distributed Consensus with One Faulty Process.*
-- Herlihy, M. & Wing, J. (1990). *Linearizability: A Correctness
-  Condition for Concurrent Objects.*
-- Raft visualizations:
-  <https://thesecretlivesofdata.com/raft/> and
-  <https://raft.github.io/>
+- Ongaro, D., & Ousterhout, J. (2014). "In Search of an
+  Understandable Consensus Algorithm." *USENIX ATC.*
+  <https://raft.github.io/raft.pdf>
+- Schneider, F. B. (1990). "Implementing Fault-Tolerant Services
+  Using the State Machine Approach." *ACM Computing Surveys,*
+  22(4). (The replicated-state-machine model.)
+- Fischer, M. J., Lynch, N. A., & Paterson, M. S. (1985).
+  "Impossibility of Distributed Consensus with One Faulty
+  Process." *JACM,* 32(2).
+- Herlihy, M., & Wing, J. (1990). "Linearizability: A Correctness
+  Condition for Concurrent Objects." *ACM TOPLAS,* 12(3).
+- Brewer, E. (2000). "Towards Robust Distributed Systems."
+  Keynote, PODC. (CAP conjecture.)
+- Gilbert, S., & Lynch, N. (2002). "Brewer's conjecture and the
+  feasibility of consistent, available, partition-tolerant web
+  services." *ACM SIGACT News,* 33(2). (CAP proof.)
+
+### Production Paxos
+
+- Chandra, T. D., Griesemer, R., & Redstone, J. (2007). "Paxos
+  Made Live: An Engineering Perspective." *PODC.*
+  (The canonical paper on Chubby and what it takes to ship
+  Paxos.)
+- Burrows, M. (2006). "The Chubby Lock Service for Loosely-Coupled
+  Distributed Systems." *OSDI.*
+- Corbett, J. C., et al. (2012). "Spanner: Google's
+  Globally-Distributed Database." *OSDI.*
+- Baker, J., et al. (2011). "Megastore: Providing Scalable, Highly
+  Available Storage for Interactive Services." *CIDR.*
+
+### etcd and bbolt
+
 - etcd documentation: <https://etcd.io/docs/>
+- Phanishayee, A., et al. (2016). "etcd v3 design notes." CoreOS
+  blog. (Why v3 broke compatibility: gRPC, flat keyspace,
+  watch-from-revision.)
+- Johnson, B. (2014). *BoltDB.* GitHub. (The B+-tree store etcd
+  forks as bbolt.)
+
+### Tutorials and visualizations
+
+- *The Secret Lives of Data: Raft.*
+  <https://thesecretlivesofdata.com/raft/>
+- *Raft Consensus Algorithm.* <https://raft.github.io/>
+- Howard, H. (2014). *ARC: Analysis of Raft Consensus.* Cambridge
+  Tech Report. (A formal-methods take, with subtle bugs found in
+  early Raft implementations.)
