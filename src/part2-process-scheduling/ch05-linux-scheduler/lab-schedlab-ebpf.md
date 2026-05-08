@@ -15,6 +15,8 @@
   systems
 - Compare CFS fairness by running tasks with different nice values
 - Quantify the observer effect of eBPF tracing (optional)
+- Predict before each measurement and rule out one alternative
+  explanation grounded in your raw counters
 
 ## Background
 
@@ -186,7 +188,7 @@ order of magnitude.
 
 ### Interpret the result
 
-Two paragraphs in your report:
+Three paragraphs in your report:
 
 1. **Mechanism.** Which step of the wakeup-to-run path (Chapter 5
    §5.2) is taking longer under load? In a 4-CPU system with 4 extra
@@ -197,6 +199,15 @@ Two paragraphs in your report:
    systemic runqueue pressure; a sharp tail with unchanged median
    points to rare events (migrations, cross-CPU wakeups, or brief
    interrupts).
+3. **Ruled-out alternative.** Name one *other* plausible mechanism
+   for the inflation — cross-NUMA migrations, IRQ steering, kernel
+   work (`ksoftirqd`, RCU callbacks), hypervisor preemption (in a
+   VM), or a candidate of your choice — and cite one signal in your
+   data that excludes it. Useful one-liner for migration:
+   `bpftrace -e 'tracepoint:sched:sched_migrate_task /comm == "stress-ng"/ { @ = count(); }'`.
+   "Migration count was 18 in both runs, so cross-CPU motion
+   cannot explain a 100× p99 inflation" is the form of the
+   argument.
 
 ### Part B Checklist
 
@@ -257,9 +268,14 @@ runnable tasks on the system.
 1. Did CFS allocate time proportional to weight? Cite the expected
    ratio from Section 5.1's weight table.
 2. If there is a discrepancy, what is plausibly causing it?
-   (Interrupts? Migrations across CPUs? Background processes?)
+   (Interrupts? Migrations across CPUs? Background processes? An
+   uneven CPU layout in your VM?)
 3. If you repeat with `nice=0` vs `nice=19`, does the ratio still
-   match the weight table?
+   match the weight table? Note that EEVDF (Linux 6.6+) and
+   classical CFS may produce slightly different short-window
+   shares; if your kernel is ≥6.6 and your numbers diverge from the
+   classical 1024:weight ratio, EEVDF's eligibility window is the
+   most likely explanation — say so.
 
 ### Part C Checklist
 
@@ -353,14 +369,22 @@ examples in Appendix D §"The Evidence Trail"):
 
 | Criterion | Points |
 |---|---|
-| SchedLab builds and runs; baseline percentiles collected | 25 |
-| Loaded-system percentiles; distribution compared | 20 |
-| Fairness analysis with nice-value ratio and interpretation | 25 |
-| Mechanism explanation ties numbers to wakeup→run path | 20 |
+| SchedLab builds and runs; baseline percentiles collected | 20 |
+| B.0 prediction written before measurement | 10 |
+| Loaded-system percentiles; distribution compared to baseline | 15 |
+| Fairness analysis with nice-value ratio and interpretation | 20 |
+| Mechanism explanation ties numbers to wakeup→run path | 15 |
+| Ruled-out alternative with supporting signal | 10 |
 | Plot included and properly labeled | 10 |
 | **Optional** observer-overhead analysis | +10 bonus |
 
 **Total: 100 (+ 10 bonus).**
+
+The AI-resistant components are the prediction (you cannot predict
+p99 on someone else's box without running the box) and the
+ruled-out alternative (you cannot exclude migration without showing
+your `sched_migrate_task` count). LLMs that fabricate either are
+easy to detect: the numbers will not match the rest of the report.
 
 ## Common Pitfalls
 
