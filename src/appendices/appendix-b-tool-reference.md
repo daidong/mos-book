@@ -34,14 +34,15 @@ Useful flags:
 - `-p <pid>` attach to a running process.
 - `--` separate `perf` flags from program args.
 
-Interpretation rules of thumb (Chapter 2 §2.5):
+Interpretation rules of thumb (Chapter 2 §2.8–2.9):
 
 - **IPC = instructions / cycles**; ~2–4 is healthy, below 1 is
   usually memory-stall-bound.
 - **cache miss rate = cache-misses / cache-references**; look
   at the rate, not the count.
 - **`<not supported>` in a VM** means the PMU event is
-  unavailable; switch to Valgrind (Chapter 2 §2.5).
+  unavailable; switch to Valgrind (Chapter 2 §2.9, *Valgrind
+  fallback for VMs*).
 
 ### `perf record` / `perf report`
 
@@ -158,6 +159,25 @@ sudo tcpretrans-bpfcc         # TCP retransmits
 A partial alternative if `bcc` is not installed: many of the
 same tools live in `bpftrace-tools` or can be written as
 bpftrace one-liners.
+
+### `bpftool`
+
+The official kernel tool for inspecting loaded BPF programs and
+maps. Used in Chapter 5's lab to confirm a libbpf tool actually
+attached:
+
+```bash
+sudo bpftool prog                  # list loaded BPF programs
+sudo bpftool prog show id <id>     # details for one program
+sudo bpftool map                   # list BPF maps
+sudo bpftool map dump id <id>      # dump map contents
+sudo bpftool perf show             # perf-event attachments
+```
+
+`bpftool` ships with `linux-tools-$(uname -r)` on Ubuntu. It is
+the right answer to "is my eBPF program actually running?" — if
+it is not in `bpftool prog`, your `bpftrace` or libbpf loader
+failed silently.
 
 ### `ftrace` / `trace-cmd`
 
@@ -290,6 +310,35 @@ ls -la /proc/$$/ns/
 # symlinks to inodes: processes in the same namespace share an inode
 ```
 
+### `seccomp-tools` and `libseccomp`
+
+Used in Chapter 12 to install syscall filters around tool
+execution.
+
+```bash
+sudo apt install -y libseccomp-dev seccomp
+# Inspect a binary's installed seccomp filter at runtime:
+sudo cat /proc/<pid>/status | grep -E "Seccomp|Speculation"
+# Dump a binary's static filter (if present):
+seccomp-tools dump ./hardened_binary
+```
+
+Writing a filter from Python:
+
+```python
+import seccomp
+f = seccomp.SyscallFilter(defaction=seccomp.KILL)
+for name in ["read", "write", "openat", "close",
+             "fstat", "exit_group", "mmap", "munmap"]:
+    f.add_rule(seccomp.ALLOW, name)
+f.load()                              # filter is now active
+```
+
+Key rule: install the filter **after** any heavyweight runtime
+(Python, JVM) has finished its own startup syscalls, or hand off
+to a minimal helper binary via `execve`. See Chapter 12 §12.7
+for the per-tool filter design.
+
 ### cgroup v2
 
 Everything under `/sys/fs/cgroup`:
@@ -319,6 +368,36 @@ sudo crictl ps                    # list containers
 sudo crictl inspect <id>          # full container state
 sudo crictl logs <id>             # logs
 ```
+
+### `kind`
+
+"Kubernetes-in-Docker" — the lab cluster used in Chapters 7, 9,
+and 11. Gives you a real control plane and kubelet inside
+Docker containers without provisioning a VM cluster.
+
+```bash
+# Install the binary (or `go install sigs.k8s.io/kind@latest`):
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+chmod +x ./kind && sudo mv ./kind /usr/local/bin/
+
+# Create a cluster (single-node by default):
+kind create cluster --name lab
+# Multi-node from a config file:
+kind create cluster --name lab --config kind-cluster.yaml
+
+# Common ops:
+kind get clusters
+kind get nodes --name lab          # docker container names of nodes
+kind delete cluster --name lab
+
+# The Pod's cgroup lives on the node container, not the host:
+NODE=$(kind get nodes --name lab | grep worker | head -1)
+docker exec -it $NODE bash         # shell on the kind node
+```
+
+A frequent pitfall: looking for cgroup files or `dmesg` lines on
+the *host*. They live on the kind node container; `docker exec`
+is the entry point.
 
 ---
 
@@ -374,9 +453,81 @@ etcdctl snapshot save backup.db
 etcdctl snapshot restore backup.db --data-dir /var/lib/etcd
 ```
 
+### etcd `benchmark`
+
+Not installed by default; build from source (Chapter 8 lab):
+
+```bash
+git clone --depth 1 --branch v3.5.17 https://github.com/etcd-io/etcd
+cd etcd && go install ./tools/benchmark
+export PATH=$PATH:$(go env GOPATH)/bin
+
+# Single-key write throughput
+benchmark --endpoints=$EP --conns=1 --clients=1 \
+  put --total=10000 --key-size=16 --val-size=256
+
+# Linearizable vs serializable read latency
+benchmark --endpoints=$EP range /foo --consistency=l --total=1000
+benchmark --endpoints=$EP range /foo --consistency=s --total=1000
+```
+
 ---
 
-## B.7 Networking (Light Reference)
+## B.7 Storage Benchmarks (Redis, MinIO)
+
+### `redis-cli` and `redis-benchmark`
+
+Two tools that ship together. `redis-cli` is for inspection;
+`redis-benchmark` is for throughput and latency measurement.
+
+```bash
+# Inspection
+redis-cli -p 6379 PING
+redis-cli -p 6379 INFO memory | grep used_memory_human
+redis-cli -p 6379 CONFIG GET appendfsync
+redis-cli -p 6379 DEBUG POPULATE 1000000 prefix 100   # synthetic data
+redis-cli -p 6379 BGSAVE                              # trigger RDB snapshot
+
+# Benchmarking
+redis-benchmark -h 127.0.0.1 -p 6379 -t set -n 200000 -c 50 -P 1
+# -t   workload (set, get, lpush, ...)
+# -n   total operations
+# -c   parallel clients
+# -P   pipeline depth (--csv adds CSV output)
+```
+
+The `-P` knob is essential when measuring fsync-bound modes
+(Chapter 11 §11.4): pipelining amortizes one fsync over many
+operations. Run `-P 1` and `-P 16` to see the gap.
+
+### `mc` (MinIO client)
+
+S3-compatible CLI used in Chapter 11 lab Part D:
+
+```bash
+# Install
+wget https://dl.min.io/client/mc/release/linux-amd64/mc
+chmod +x mc && sudo mv mc /usr/local/bin/
+
+# Configure an alias for an endpoint
+mc alias set local http://127.0.0.1:9000 admin password
+
+# Bucket and object ops
+mc mb local/lab                        # create bucket
+mc cp ./file.dat local/lab/            # PUT
+mc ls local/lab/                       # list
+mc cat local/lab/file.dat              # GET
+mc rm local/lab/file.dat               # DELETE
+```
+
+`mc` works against any S3-compatible endpoint, not just MinIO
+(AWS, Cloudflare R2, Backblaze B2). For benchmarking, use
+`mc admin trace` or `s3-benchmark` rather than wrapping `mc cp`
+in a shell loop — the loop's process-startup cost dominates.
+
+---
+
+## B.8 Networking (Light Reference)
 
 ### `ss`
 
@@ -422,7 +573,45 @@ ip -s link show eth0    # per-interface counters
 
 ---
 
-## B.8 Reading This Appendix
+## B.9 Agent and trace observability
+
+Used in Chapter 12 Lab F. None of these need to be installed by
+hand; the lab implements a minimal tracer in 30 lines of Python.
+In production you would use one of:
+
+```bash
+# OTel auto-instrumentation for Python LLM apps
+pip install opentelemetry-distro \
+            opentelemetry-instrumentation-openai
+opentelemetry-bootstrap -a install
+
+# OpenLLMetry / OpenInference / Phoenix / Langfuse:
+# pip-installable libraries that emit gen_ai.* spans automatically.
+```
+
+The relevant attribute names are the OTel *generative AI*
+semantic conventions. Use them verbatim:
+
+| Span name | When |
+|---|---|
+| `agent.task` (or `invoke_agent`) | one full agent task (root) |
+| `gen_ai.client.request` | one LLM call |
+| `tool.call` (or `execute_tool`) | one tool invocation |
+
+Key attributes:
+
+- `gen_ai.system` ("openai", "anthropic", ...)
+- `gen_ai.request.model`, `gen_ai.usage.input_tokens`,
+  `gen_ai.usage.output_tokens`, `gen_ai.response.finish_reasons`
+- `tool.name`, `tool.args_hash`, `tool.status`
+
+If your code emits compliant spans, any OTel-aware backend
+(Jaeger, Tempo, Honeycomb, Datadog, Phoenix, Langfuse) renders
+the waterfall the same way.
+
+---
+
+## B.10 Reading This Appendix
 
 Think of this appendix as the bridge between the body of the
 book and the man pages. The book tells you *why* a tool matters

@@ -8,7 +8,7 @@ Each project is deliverable as a short paper plus a
 reproducibility artifact — environment script, pinned versions,
 raw data, analysis scripts, per-figure regeneration
 instructions. (Appendix C covers the environment-pinning
-mechanics; Chapter 3 §3 covers the evidence contract every
+mechanics; Chapter 3 §3.6 covers the evidence contract every
 claim in the paper has to satisfy.) Full project briefs and
 grading rubrics live in the `projects/` directory of the book
 repository.
@@ -30,6 +30,24 @@ All four projects share a common shape:
 Pick the project that matches your background. All four touch
 on Chapters 2–3 (measurement, tail latency); the other chapters
 each project emphasizes are listed below.
+
+### A picker matrix
+
+The four projects sit at different points on three axes:
+team size, prior systems experience needed, and where the
+dominant difficulty lives.
+
+| Project | Team size | Prior experience | Dominant difficulty | Hardware needed |
+|---|---|---|---|---|
+| 1. Red/Blue Oncall Game | 2–3 students per team, 2 teams | Some Linux + K8s comfort | **Investigation under time pressure** — reading dashboards while a fault is live | One Ubuntu VM, 4–8 GB RAM |
+| 2. Multi-hop K8s Tail Latency | 1–2 students | Comfort with `kind`, basic tracing | **Decomposing latency by hop** — distributed tracing + eBPF in one trace | One Ubuntu VM, 8 GB RAM |
+| 3. LLM Inference Server Profiling | 1 student | Comfort with at least one LLM serving stack (vLLM, llama.cpp, TGI) | **Reasoning about queueing in a stateful server** — batches, KV-cache, continuous batching | GPU helpful but not required; CPU-only is acceptable for small models |
+| 4. SWE-agent Runtime Profiling | 1 graduate student | Strong Linux + container fluency; some Python | **Instrumenting a complex stack you did not write** — spans across LLM + sandbox + tool I/O | One Ubuntu VM, 8 GB RAM, plus an LLM API key or a local model |
+
+Projects 1 and 2 are the most accessible; Project 3 rewards
+students who already use LLM serving stacks; Project 4 is the
+most ambitious and is the right fit for a graduate student or
+an advanced undergraduate doing an honors thesis.
 
 ---
 
@@ -63,6 +81,23 @@ room.
 
 **Difficulty:** Medium. Good fit for 2–3 student teams.
 
+**Recommended background reading:**
+
+- Cook, R. I. (1998). *How Complex Systems Fail.* Cognitive
+  Technologies Laboratory, University of Chicago.
+  (The 18-point checklist is the conceptual frame for any
+  postmortem.)
+- Beyer, B., Jones, C., Petoff, J., & Murphy, N. R. (2016).
+  *Site Reliability Engineering.* O'Reilly. Chapters 11
+  (Being On-Call), 13 (Emergency Response), and 15
+  (Postmortem Culture).
+- Allspaw, J. (2009). "Trade-Offs Under Pressure: Heuristics
+  and Observations of Teams Resolving Internet Service
+  Outages." Lund University thesis.
+  (How real on-call engineers reason during incidents.)
+- Google SRE Workbook (2018). *Postmortem culture and template.*
+  <https://sre.google/workbook/postmortem-culture/>
+
 ---
 
 ## A.2 Project 2: Multi-hop K8s Tail Latency
@@ -94,6 +129,19 @@ driven tuning, writing a performance paper that is honest about
 where the latency actually comes from.
 
 **Difficulty:** Medium–high. Individual or pair project.
+
+**Recommended background reading:**
+
+- Dean, J., & Barroso, L. A. (2013). "The Tail at Scale."
+  *Communications of the ACM,* 56(2). (The paper this project
+  is structurally a hands-on version of.)
+- Sigelman, B. H., et al. (2010). "Dapper, a Large-Scale
+  Distributed Systems Tracing Infrastructure." Google
+  Technical Report dapper-2010-1.
+- Kaldor, J., et al. (2017). "Canopy: An End-to-End Performance
+  Tracing and Analysis System." *SOSP.*
+- OpenTelemetry. *Tracing for distributed systems.*
+  <https://opentelemetry.io/docs/concepts/signals/traces/>
 
 ---
 
@@ -132,6 +180,22 @@ performance claims about an AI system that survive scrutiny.
 **Difficulty:** Medium–high. Prior exposure to GPU tooling
 helps but is not required.
 
+**Recommended background reading:**
+
+- Kwon, W., et al. (2023). "Efficient Memory Management for
+  Large Language Model Serving with PagedAttention (vLLM)."
+  *SOSP.* (KV-cache as a paged-memory problem — a direct
+  bridge from Chapter 2 to LLM serving.)
+- Yu, G.-I., Jeong, J. S., Kim, G.-W., Kim, S., & Chun, B.-G.
+  (2022). "Orca: A Distributed Serving System for
+  Transformer-Based Generative Models." *OSDI.* (The original
+  continuous-batching design.)
+- Patel, P., et al. (2023). "Splitwise: Efficient Generative
+  LLM Inference Using Phase Splitting." *ISCA 2024.*
+  (Prefill vs decode as separate workload classes.)
+- Dao, T., et al. (2022). "FlashAttention: Fast and
+  Memory-Efficient Exact Attention with IO-Awareness." *NeurIPS.*
+
 ---
 
 ## A.4 Project 4: SWE-agent Runtime Profiling
@@ -169,6 +233,24 @@ connecting measurement to improvement without overclaiming.
 
 **Difficulty:** High. Individual project for graduate students
 with prior systems experience.
+
+**Recommended background reading:**
+
+- Jimenez, C. E., et al. (2024). "SWE-bench: Can Language
+  Models Resolve Real-World GitHub Issues?" *ICLR.*
+  (The benchmark; download a small split for the project.)
+- Yang, J., et al. (2024). "SWE-agent: Agent-Computer
+  Interfaces Enable Automated Software Engineering." *NeurIPS.*
+- Wang, X., et al. (2024). "OpenHands: An Open Platform for
+  AI Software Developers as Generalist Agents." *ICLR.*
+- Yao, S., et al. (2022). "ReAct: Synergizing Reasoning and
+  Acting in Language Models." arXiv:2210.03629.
+  (The loop your trace will be measuring; cross-reference
+  Chapter 12 §12.9.)
+- Aim Security (2025). *EchoLeak: zero-click data exfiltration
+  in Microsoft 365 Copilot.* CVE-2025-32711 disclosure.
+  (One published failure mode of an agent runtime that didn't
+  have the safety lens of Chapter 12.)
 
 ---
 
