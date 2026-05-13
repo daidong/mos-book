@@ -128,7 +128,7 @@ partitioned minority returns errors rather than stale data. The
 four-second outage in this chapter's opener is exactly that
 choice surfacing in production.
 
-## 8.2 What consensus is *not*: atomic commit
+## 8.2 Consensus vs. atomic commit (2PC / 3PC)
 
 Before Paxos, it is worth separating consensus from a cousin
 problem it is often confused with: **atomic commit** (2PC / 3PC).
@@ -528,7 +528,7 @@ Two layers of compaction keep etcd's footprint bounded:
 
 ## 8.6 What does strong consistency cost?
 
-Consensus is not free. Every write involves:
+Consensus has a per-write bill. Every write involves:
 
 - One local `fsync` on the leader's WAL.
 - At least one network round-trip to followers.

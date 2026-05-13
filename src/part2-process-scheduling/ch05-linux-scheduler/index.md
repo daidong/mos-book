@@ -12,11 +12,10 @@
 >   that measure scheduling latency
 > - Reason about the observer effect and when eBPF overhead matters
 
-Two facts from Chapter 4 set up this one. First, scheduling latency
-— the wait between `sched_wakeup` and `sched_switch` — is the
-dominant tail-latency source on any system that is not 100 %
-loaded. Second, that wait is determined by which task the kernel
-picks next, which is the scheduler's job.
+Chapter 4 left this chapter two premises: scheduling latency — the
+wait between `sched_wakeup` and `sched_switch` — dominates p99 on any
+system below 100 % load, and the length of that wait is decided by
+whichever task the kernel picks next.
 
 So the question this chapter answers is: *given a wakeup, how does
 the kernel decide who runs, and how do I see that decision from
@@ -72,10 +71,10 @@ the same wall-clock rate.
 
 ### Step 2: pick the smallest vruntime
 
-The scheduling rule is then trivially simple: at each decision
-point, **run the runnable task with the smallest `vruntime`**.
-Smaller `vruntime` means "most under-served relative to weight,"
-and running that task is how CFS catches it up.
+The scheduling rule follows directly: at each decision point,
+**run the runnable task with the smallest `vruntime`**. Smaller
+`vruntime` means "most under-served relative to weight," and
+running that task is how CFS catches it up.
 
 This rule has the right asymptotic behavior. Two equal-weight
 tasks alternate, each accumulating `vruntime` at the same rate. A
@@ -244,11 +243,12 @@ sched_ext replaces and why.
 
 ## 5.3 Tracing the scheduler with eBPF
 
-Knowing the policy and the critical path is not enough; you also
-have to *see* the policy decide and the path execute. The standard
-Linux answer is **eBPF**: extended Berkeley Packet Filter — a
-verifier-checked, in-kernel virtual machine that runs small
-programs in response to kernel events.
+Policy and critical path explain *what* the scheduler does. To
+debug it on a real system, you also need to *see* the policy decide
+and the path execute. The standard Linux answer is **eBPF**:
+extended Berkeley Packet Filter, a verifier-checked, in-kernel
+virtual machine that runs small programs in response to kernel
+events.
 
 The lineage matters for understanding what eBPF can and cannot do.
 BPF began as McCanne and Jacobson's (1993) packet-filter language
@@ -378,10 +378,10 @@ living in the tail.
 
 ### A production debugging example
 
-The recipe above is not a classroom exercise; it is the standard
-first step in production scheduler debugging. A concrete use: an
-inference-serving team sees p99 latency spike from 12 ms to 80 ms
-on a 64-core host at ~40 % average CPU. They attach a one-liner:
+The recipe above is the standard first step in production scheduler
+debugging. A concrete use: an inference-serving team sees p99 latency
+spike from 12 ms to 80 ms on a 64-core host at ~40 % average CPU.
+They attach a one-liner:
 
 ```bash
 sudo bpftrace -e '
@@ -448,9 +448,9 @@ production interpretation of a Chapter 4–7 mechanism:
   `Guaranteed` QoS and integer CPU requests gets pinned to
   specific cores via `cpuset.cpus`, while every other Pod runs on
   the shared pool. This is the production interpretation of
-  Chapter 7's QoS classes — they are not just a billing tier; they
-  are a cgroup membership decision that changes which CFS
-  runqueue your workload competes on.
+  Chapter 7's QoS classes: the class label is a cgroup-membership
+  decision that decides which CFS runqueue your workload competes
+  on.
 
 - **NUMA-aware pinning for ML inference.** Meta's Llama serving
   fleet pins inference workers per NUMA node so that the model
@@ -550,12 +550,12 @@ measures this directly.
 
 ### VM reality check
 
-In a VM, hardware PMU events are often unavailable or wrong — but
-**tracepoints are not PMU events**. They are stable kernel
-instrumentation that works in VirtualBox, VMware, KVM, or on bare
-metal. That is why the lab uses eBPF tracepoints as its primary
-measurement tool: cache-miss numbers may be zero in your VM, but the
-scheduler tracepoints will be real.
+In a VM, hardware PMU events are often unavailable or wrong.
+Tracepoints are stable kernel instrumentation, independent of the
+PMU, and they work in VirtualBox, VMware, KVM, or on bare metal.
+That is why the lab uses eBPF tracepoints as its primary measurement
+tool: cache-miss numbers may be zero in your VM, but the scheduler
+tracepoints will be real.
 
 ## Summary
 

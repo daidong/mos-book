@@ -15,29 +15,27 @@
 
 Solomon Hykes demoed Docker on a hotel-room laptop at PyCon US in
 March 2013, in five minutes that changed how an industry packaged
-software (Hykes, 2013). What he was demonstrating was not new
-technology — every primitive he used had shipped in the Linux
-kernel by 2008. What was new was the idea that the existing
+software (Hykes, 2013). Every primitive he used had shipped in the
+Linux kernel by 2008. What Docker added was the idea that those
 primitives, composed by a small userspace runtime and a layered
 image format, were enough to give every developer a private
 userspace on a shared kernel.
 
 So: what *are* those primitives, and how does composing them turn
 an ordinary Linux process into something a developer recognizes as
-a container? The surprise, if you have not seen it before, is that
-a container is *not* a new kind of object. It is an ordinary Linux
-process that has been given two things: a restricted view
-(namespaces) and a resource budget (cgroups). The container runtime
-is a small program that composes them.
+a container? A container is an ordinary Linux process given two
+things: a restricted view (namespaces) and a resource budget
+(cgroups). The container runtime is a small program that composes
+them.
 
 ## 6.1 What is a container, and where did it come from?
 
 The one-line answer is that a container is an ordinary Linux
 process given (a) a restricted view of kernel resources and (b) a
-resource budget. It is not a VM. A VM emulates hardware and runs
-its own kernel; a container shares the host kernel. The boundary
-of a container is not a hypervisor — it is a collection of kernel
-mechanisms applied to the processes inside.
+resource budget. A VM, by contrast, emulates hardware and runs its
+own kernel; a container shares the host kernel. The container's
+boundary is a collection of kernel mechanisms applied to the
+processes inside — no hypervisor, no special kernel object.
 
 Two mechanisms do almost all of the work:
 
@@ -82,10 +80,10 @@ not a Docker invention. Five waypoints:
   side of the equation. Tejun Heo's cgroup v2 unification
   (Linux 4.5, 2016) is what we use today.
 
-Docker's contribution was not the kernel mechanism. It was a
-packaging format (image layers), a distribution model (registries),
-and a developer-facing CLI that made the assembled stack accessible
-to people who had never read `man 7 namespaces`. The Open Container
+Docker's contribution sat above the kernel: a packaging format
+(image layers), a distribution model (registries), and a developer-
+facing CLI that made the assembled stack accessible to people who
+had never read `man 7 namespaces`. The Open Container
 Initiative's runtime and image specs (OCI, 2015) later codified the
 result so that runc, containerd, CRI-O, and Podman could
 interoperate.

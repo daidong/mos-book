@@ -106,12 +106,12 @@ lookup, readahead, and block I/O described in §10.3.
 ![Hard links and soft links: two directory entries can point at the same inode; a symbolic link is a separate inode whose content is a path string](figures/hardlink-softlink.png)
 *Figure 10.1: Hard links vs soft links. A hard link is a second directory entry pointing at the same inode — both names are equally "real." A symbolic link is a separate inode whose content is a path string; it can break if the target is removed.*
 
-Crucial detail: **the filename is not in the inode**. The inode
-holds metadata (permissions, size, timestamps, extent pointers);
-the name lives in a directory entry that maps `(name → inode#)`.
-That separation is what makes hard links possible — two
-directory entries can point at the same inode, which is why
-`ls -l` shows multiple names for one underlying file.
+**The filename is not in the inode.** The inode holds metadata
+(permissions, size, timestamps, extent pointers); the name lives
+in a directory entry that maps `(name → inode#)`. That separation
+is what makes hard links possible — two directory entries can
+point at the same inode, which is why `ls -l` shows multiple
+names for one underlying file.
 
 ![A directory is a table of (name, inode number) pairs](figures/directoryList.png)
 *Figure 10.2: A directory is a file whose content is a list of (name, inode#) entries. Lookup is O(n) in a linear list; modern filesystems use hash trees (ext4 HTree) or B+ trees (XFS) for O(1) or O(log n).*

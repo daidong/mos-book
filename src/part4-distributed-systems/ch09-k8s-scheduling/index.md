@@ -38,8 +38,9 @@ by turning Pod specs into cgroup writes. Chapter 8 showed etcd
 using Raft to keep cluster state consistent. This chapter puts
 them together. The question it answers is: **given a new Pod,
 who decides which node runs it, and how?** The answer is the
-`kube-scheduler`, a user-space component that does a classical
-job — scheduling — with surprisingly modern machinery.
+`kube-scheduler`, a user-space component that solves a classical
+problem — scheduling — through a watch-and-reconcile loop sitting
+on top of a Raft-backed log.
 
 ## 9.1 Why is Kubernetes an operating system?
 

@@ -14,8 +14,8 @@
 At 2:13 p.m., a service dashboard reports that a checkout pod is healthy.
 CPU usage is below its request, memory is below its limit, and the
 container has not restarted. Yet p99 latency has jumped from 8 ms to
-180 ms. The platform view says the pod is running. The OS view asks a
-more useful question: where did the request wait?
+180 ms. The platform view says the pod is running. The OS view asks
+where the request waited.
 
 That wait might be in the runqueue, where a **runnable** task is ready to
 execute but not yet scheduled. It might be in **page reclaim**, where the
@@ -46,9 +46,9 @@ burst," we will ask what queue formed, where it formed, and which resource
 boundary it crossed.
 
 > **Key insight:** Modern platforms give OS mechanisms new names and new
-> control surfaces; they do not replace them. If you cannot explain the
-> kernel- and hardware-level cause, you do not yet understand the production
-> symptom.
+> control surfaces. The kernel- and hardware-level cause is still where
+> the explanation lives; if you can't name it, you haven't finished
+> diagnosing the symptom.
 
 ## 1.2 Where is the OS boundary in a modern stack?
 
@@ -64,11 +64,11 @@ et al., 2016). Figure 1.1 makes the boundary map explicit.
 ![Layered stack showing control plane, user-space runtimes, kernel, and hardware, with example responsibilities at each layer](figures/modern-os-stack.svg)
 *Figure 1.1: A modern systems stack still reduces to a layered resource-management path. The important question is not which layer is “the real OS,” but which layer owns the decision and which layer pays the execution cost.*
 
-The useful question is not "which layer is the real OS?" The useful
-question is "which layer owns which decision?" The answer is usually more
-specific than students expect. The table uses **cgroup**, or control group,
-for the Linux kernel mechanism that groups processes so their resource use
-can be limited, accounted, and observed through a filesystem interface.
+The interesting question is which layer owns which decision. The answer
+is usually more specific than students expect. The table below uses
+**cgroup**, or control group, for the Linux kernel mechanism that groups
+processes so their resource use can be limited, accounted, and observed
+through a filesystem interface.
 
 | Production term | OS-level analogue | Where to observe it first | Typical failure mode |
 |---|---|---|---|
@@ -90,22 +90,22 @@ has a kernel-level enforcement signal. The next question is whether the
 limit is too low, the workload is bursty, or the measurement window hides
 short quota exhaustion.
 
-Two habits follow from this table. First, separate policy from mechanism.
-Second, ask where the boundary is crossed. If the phenomenon is a branch
-misprediction, the hardware owns it. If it is a page fault, the MMU and
-kernel cooperate on it. If it is a container limit, the kernel enforces it
-even if the user first notices it through `kubectl`.
+Two patterns recur across the rows of this table. The first separates
+policy from mechanism: a Kubernetes CPU limit is a policy decision, but
+cgroup enforcement in the kernel is what actually clamps the work. The
+second asks where the boundary lies. A branch misprediction is owned by
+hardware, a page fault by the MMU and kernel cooperating, a container
+limit by the kernel even when `kubectl` is the layer that flags it.
 
 > **Note:** This book uses the full-stack meaning of "operating system":
-> not just the kernel binary, but the resource-management path from
-> hardware up through the runtime and, when relevant, the control plane.
-> That broader view is useful precisely because it still reduces to a small
-> number of mechanisms.
+> the resource-management path from hardware up through the kernel, the
+> runtime, and, when relevant, the control plane. That broader view is
+> useful precisely because it still reduces to a small number of
+> mechanisms.
 
 ## 1.3 What habits does this book train?
 
-Every chapter in this book trains the same three skills, in the same order.
-The order matters.
+Every chapter in this book trains the same three skills, in this order.
 
 **Understand** means naming the mechanism precisely. If we say Linux uses
 CFS, you should know that CFS orders runnable tasks by **virtual runtime**
@@ -130,18 +130,17 @@ A compact way to think about the book is this:
 |---|---|---|
 | What is the mechanism? | Understand | A step-by-step account with the right boundary |
 | How do I observe it? | Measure | A command, a counter, or a trace with reproducible output |
-| Where does it matter today? | Explain in context | A real production setting, not just a toy loop |
+| Where does it matter today? | Explain in context | A real production setting with stakes |
 | How does it fail? | Explain causally | A concrete slow path, edge case, or resource limit |
 
-If a chapter is readable but cannot answer those four questions, it is not
-good enough for this book.
+Every chapter in the book is held to those four questions.
 
 ## 1.4 What happens when a shell starts a program?
 
-The opening sections give us a vocabulary. Now we need an artifact. The
-smallest useful artifact is a shell starting a program, because that single
-event crosses the user-space, kernel, and hardware boundaries that the rest
-of the book will keep revisiting.
+The earlier sections give us vocabulary; the rest of the chapter needs an
+artifact. The smallest useful one is a shell starting a program. That
+single event crosses every user-space, kernel, and hardware boundary the
+rest of the book will revisit.
 
 Consider a shell launching this program:
 
@@ -176,7 +175,8 @@ clone(...)                                  = 12345
 [pid 12345] exit_group(0)                  = ?
 ```
 
-This small trace already exposes the major boundaries of the subject.
+Six steps appear in that trace, and each of them maps to a mechanism the
+rest of the book will study in detail.
 
 1. The shell calls `clone()` or `fork()` to create a child process.
 2. The child calls `execve()` to replace its old address space with the new
@@ -193,14 +193,11 @@ This small trace already exposes the major boundaries of the subject.
 ![Swimlane diagram showing shell launch, fork or clone, execve, loader activity, write system call, and terminal output across user space, kernel, and device layers](figures/program-launch-path.svg)
 *Figure 1.2: Even a trivial `hello` program crosses layers repeatedly. The shell creates a process, `execve()` installs a new image, the loader maps dependencies, and `write()` crosses back into the kernel to reach the terminal.*
 
-Three ideas matter here.
-
-**Process creation** is not the same as program loading. `fork()` or
-`clone()` creates an execution context; `execve()` replaces its code and
-data image. That separation is a Unix design choice, not an accident. It
-lets the parent set up file descriptors, environment, and credentials before
-the new program image is installed, which is how shells implement
-redirection, pipelines, and job control (Ritchie & Thompson, 1974).
+**`fork` creates a process; `execve` replaces its image.** That separation
+is a deliberate Unix design choice. It lets the parent set up file
+descriptors, environment, and credentials between the two calls, which is
+how shells implement redirection, pipelines, and job control (Ritchie &
+Thompson, 1974).
 
 **Virtual memory** is established before most of your code runs. `mmap()`
 creates address-space regions, but pages are often backed lazily and only
@@ -242,10 +239,9 @@ Each counter points at a mechanism you will revisit later:
 | `cycles` | hardware time consumed | more work or worse stalls |
 | `instructions` | retired machine instructions | algorithmic work done |
 
-The crucial lesson is that a single command already spans user space,
-kernel policy, and hardware execution. That is why the book insists on
-cross-layer explanations. A production incident rarely lives at just one
-layer.
+A single `./hello` already spans user space, kernel policy, and hardware
+execution. That is why the book insists on cross-layer explanations: a
+production incident almost never lives at one layer alone.
 
 ## 1.5 How should you use the rest of the book?
 
@@ -255,13 +251,13 @@ agent runtimes. Every chapter is expected to answer the same four questions:
 what is the mechanism, how do I observe it, where does it matter now, and
 how does it fail?
 
-The labs are the enforcement mechanism for that standard. They are not busy
-work. A good lab requires you to predict a result before running anything,
-collect raw artifacts from your own environment, explain why the result did
-or did not match the prediction, and rule out at least one plausible
-alternative explanation. That matters even more now that students can use AI
-for drafting and debugging. If a lab can be completed convincingly without
-original evidence, it is poorly designed.
+The labs are how the book enforces that standard. A good lab asks you to
+predict a result before running anything, collect raw artifacts from your
+own environment, explain why the result did or did not match the
+prediction, and rule out at least one plausible alternative. AI tools for
+drafting and debugging make that requirement sharper rather than weaker:
+a lab that can be completed convincingly without original evidence is
+poorly designed.
 
 Each lab therefore uses a three-tier structure:
 
@@ -269,26 +265,26 @@ Each lab therefore uses a three-tier structure:
 - **Part B:** deeper comparison, interpretation, and exclusion of alternatives
 - **Part C:** optional extension or open-ended exploration
 
-By the end of the book, the target skill is not "I have heard of this OS
-concept." It is "I can observe this mechanism on a real system, explain the
-signal, and defend my diagnosis."
+By the end of the book, the target skill is the ability to observe an OS
+mechanism on a real system, explain the signal it produces, and defend
+the diagnosis under questioning.
 
 ## Summary
 
-Key takeaways from this chapter:
+Four points carry the rest of the book:
 
-- The right way to read modern systems is through mechanisms, not labels.
-  Containers, pods, and agent runtimes still rest on scheduling, virtual
-  memory, protection, and I/O.
-- The useful boundary map is user space ↔ kernel ↔ hardware, with runtimes
-  and control planes adding policy above it. Good diagnosis depends on
-  knowing which layer owns the decision and which layer pays the execution
-  cost.
-- This book trains three habits in order: understand the mechanism, measure
-  it with reproducible evidence, and explain the result causally.
-- Even a trivial `hello` program exercises process creation, `execve()`,
-  virtual memory setup, dynamic linking, syscall crossing, scheduling, and
-  page faults. The foundations are already visible in the first trace.
+- Modern systems are read through mechanisms, not labels. Containers,
+  pods, and agent runtimes still rest on scheduling, virtual memory,
+  protection, and I/O.
+- The boundary map is user space ↔ kernel ↔ hardware, with runtimes and
+  control planes adding policy above it. Diagnosis depends on knowing
+  which layer owns the decision and which layer pays the execution cost.
+- Every chapter trains the same three habits in order: understand the
+  mechanism, measure it with reproducible evidence, and explain the
+  result causally.
+- A trivial `hello` already exercises process creation, `execve()`,
+  virtual memory setup, dynamic linking, the syscall boundary, scheduling,
+  and page faults. The foundations are visible in the first trace.
 
 ## Further Reading
 

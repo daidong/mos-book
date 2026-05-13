@@ -61,9 +61,10 @@ complexity stays the same.
 A log-processing pipeline, an analytics query, an in-memory cache, a database
 index, and an LLM inference server all care about the same question: does the
 hot data fit in the fastest level of memory the CPU can reach cheaply? The
-answer is not just an architecture fact. The operating system influences it
-through virtual-memory mappings, page placement, replacement policy, cgroup
-limits, **non-uniform memory access** (NUMA) placement, and scheduling.
+answer is partly an architecture fact and partly an OS decision: virtual-
+memory mappings, page placement, replacement policy, cgroup limits,
+**non-uniform memory access** (NUMA) placement, and scheduling all bend
+the result.
 
 ![Memory hierarchy pyramid showing registers, L1, L2, L3, DRAM, and storage with increasing latency and capacity](figures/memory_hierarchy_pyramid.png)
 *Figure 2.1: The memory hierarchy is a stack of trade-offs. Higher levels are smaller and faster; lower levels are larger and more expensive to touch on the critical path.*
@@ -112,27 +113,27 @@ The purpose of measurement is to estimate which term changed.
 
 ### The traditional OS lesson
 
-Classical memory-management papers were not just trying to make paging
-faster. They were trying to prevent the system from accepting more runnable
-work than memory could sustain. The working-set model, page-fault frequency
-(PFF), and WSClock all ask versions of the same control question: should the
-OS give this process more frames, take frames away, or reduce the number of
+Classical memory-management papers were trying to prevent the system from
+accepting more runnable work than memory could sustain. Faster paging was
+a means to that end. The working-set model, page-fault frequency (PFF),
+and WSClock all ask versions of the same control question: should the OS
+give this process more frames, take frames away, or reduce the number of
 active processes? Denning and Schwartz (1972) related working-set size to
-missing-page rates; Carr and Hennessy's WSClock (1981) translated working-set
-ideas into an implementable replacement algorithm.
+missing-page rates; Carr and Hennessy's WSClock (1981) translated
+working-set ideas into an implementable replacement algorithm.
 
-That lineage matters in modern systems. A Kubernetes node under memory
-pressure is not just "low on RAM." It is making the same kind of admission
-and replacement decision, now mediated through cgroups, reclaim, page cache,
-OOM scoring, and pressure signals. The production vocabulary changed; the
+That lineage carries directly into modern systems. A Kubernetes node
+under memory pressure is making the same admission and replacement
+decision Denning analyzed, now mediated through cgroups, reclaim, page
+cache, OOM scoring, and pressure signals. The vocabulary changed; the
 memory-management problem did not.
 
 ## 2.3 How do caches turn locality into speed?
 
 A **cache** is a small, fast store that keeps recently used data close to the
-core. The unit of transfer is not a byte but a **cache line**, typically 64
-bytes. When the CPU reads one byte, the hardware usually fetches the whole
-line containing it.
+core. The unit of transfer between memory levels is the **cache line**,
+typically 64 bytes. When the CPU reads one byte, the hardware fetches the
+whole line containing it.
 
 That is why **locality** matters.
 
@@ -166,7 +167,7 @@ containing it. Sequential access reuses that fetched data; strided or random
 access often discards it.
 
 ![Cache line fetch: the CPU requests byte 10 and the hardware fetches the full 64-byte block into the L1 data cache](figures/cache_line_fetch.png)
-*Figure 2.3: A cache miss fetches an entire 64-byte line, not just the requested byte. Sequential access exploits the remaining bytes; strided or random access discards them.*
+*Figure 2.3: A cache miss fetches the entire 64-byte line containing the requested byte. Sequential access reuses the surrounding bytes; strided or random access discards them.*
 
 This pattern appears constantly in real systems.
 
@@ -252,9 +253,9 @@ was not resident and the task had to wait for I/O.
 ![Minor page faults map a page already in memory; major page faults require loading from disk and a context switch](figures/minor_vs_major_fault.png)
 *Figure 2.6: Minor faults repair mappings without storage I/O. Major faults require the kernel to issue I/O, deschedule the task, and resume it only after the page arrives.*
 
-That is why page faults belong in an OS textbook, not just an architecture
-course. The TLB is hardware. Page tables are OS-managed state. The fault path
-is kernel policy in action.
+That is why page faults belong in an OS textbook as much as in an
+architecture course. The TLB is hardware. Page tables are OS-managed
+state. The fault path is kernel policy in action.
 
 Measure it with:
 
@@ -381,9 +382,10 @@ For measurement, look for three patterns:
 | latency spikes during allocation | huge-page promotion, compaction, or reclaim | kernel tracepoints, PSI, `vmstat` |
 | slowdown on many-core mapping changes | TLB shootdowns or page-table contention | `perf`, kernel tracepoints, CPU migrations |
 
-The broader lesson is that virtual memory is not free abstraction. It is a
-contract among hardware translation structures, kernel page tables, and
-user-space allocation behavior.
+Virtual memory is a contract among hardware translation structures,
+kernel page tables, and user-space allocation behavior. It costs cycles
+wherever those pieces have to agree, and that bill comes due in three
+places: TLB pressure, huge-page management, and shootdown traffic.
 
 ## 2.7 Where do branches fit in a memory chapter?
 
@@ -534,9 +536,9 @@ and one defensible.
 | Conclusion | "v2 is 7% faster" | "On this hardware, v2's p50 user-time is 4.8% lower; IPC unchanged; branch-miss rate dropped from 4.1% to 3.6%, consistent with the new pivot heuristic." |
 | What it survives | nothing; a rerun can overturn it | another engineer can rerun it on a comparable host and check the mechanism |
 
-The bad column is not a strawman. Many internal performance reports an
-engineer reads in their first year of work look like the bad column. The goal
-of this chapter is to make the good column the default.
+The bad column is what many internal performance reports actually look
+like in an engineer's first year of work. The goal of this chapter is to
+make the good column the default before that habit forms.
 
 On shared systems, add a fifth property: **hygiene**.
 
@@ -559,14 +561,14 @@ engineers know which one they are doing.
 > scheduler movement, memory pressure, and unavailable counters, it is not
 > robust enough for modern systems work.
 
-### A production case: hash-table lookups on Facebook's web tier
+### A production case: profiling Facebook's web tier
 
-The four-property checklist above is not aspirational. Facebook's 2015 paper
-*Profiling a Warehouse-Scale Computer* (Kanev et al., ISCA '15) is a
-canonical example of getting it right at scale. The team ran continuous,
-fleet-wide performance-counter sampling on production web servers and
-aggregated the data across millions of machine-hours. The result was concrete
-and uncomfortable:
+The four-property checklist describes how performance work actually looks
+at scale. Facebook's 2015 paper *Profiling a Warehouse-Scale Computer*
+(Kanev et al., ISCA '15) is the canonical example. The team ran
+continuous, fleet-wide performance-counter sampling on production web
+servers and aggregated the data across millions of machine-hours. The
+result was concrete and uncomfortable:
 
 - A large fraction of fleet CPU time was concentrated in a small set of
   primitives such as memory allocation, hashing, string handling, and data
@@ -590,9 +592,10 @@ scale: measure the real bottleneck, connect it to a mechanism, then change
 layout or code generation so the hardware sees a better instruction and data
 path.
 
-The lab in this chapter is not fleet scale. The discipline is the same: name
-the variable, fix the baseline, sample long enough, report rates instead of
-raw counts, and refuse to stop until the mechanism is clearer than the noise.
+The lab in this chapter operates at a smaller scale than a fleet, but the
+discipline is the same: name the variable, fix the baseline, sample long
+enough, report rates instead of raw counts, and refuse to stop until the
+mechanism is clearer than the noise.
 
 ## Summary
 

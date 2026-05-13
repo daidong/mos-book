@@ -280,11 +280,11 @@ in use today:
   Erlang/OTP processes, Rust's Tokio tasks, and Python's
   `asyncio` coroutines are variations.
 
-The practical takeaway is not that one model wins. It is that the
-model decides what your runqueue depth looks like under load, which
-in turn decides your p99 — the topic of §4.6. For the rest of this
-book, "thread" means Linux kernel thread unless we explicitly say
-otherwise.
+The practical takeaway is that the threading model decides what your
+runqueue depth looks like under load, and runqueue depth decides your
+p99 — the topic of §4.6. No model wins universally; each is a
+different point on the same tradeoff curve. For the rest of this book,
+"thread" means Linux kernel thread unless we say otherwise.
 
 ### POSIX threads in a page
 
@@ -353,9 +353,9 @@ policy wins:
 Four policies form the conceptual backbone every modern scheduler
 is assembled from. Each is presented in the standard texts
 (Tanenbaum & Bos, 2014; Silberschatz et al., 2018; Arpaci-Dusseau &
-Arpaci-Dusseau, 2018, chs. 7–9). The point of revisiting them is
-not history; it is to recognize each one as a special case of
-behavior CFS still produces under the right load.
+Arpaci-Dusseau, 2018, chs. 7–9). The reason to revisit them here is
+that CFS still produces each one as a special case under the right
+load.
 
 **FIFO / First-Come First-Served.** Run tasks in arrival order. Cheap
 and starvation-free, but a short job stuck behind a long one pays
@@ -581,13 +581,13 @@ follow this script:
   exist precisely so that thread-per-request code can keep its
   programming model while paying goroutine-class scheduling cost.
 
-Thread-per-request is not strictly worse. It is simpler to debug,
-easier to reason about under failure, and on hardware where
-requests are CPU-bound (image transcoding, ML inference) it may
-even win because runtime overhead per task is zero. The question to
-ask in a code review is not *"is this async?"* but *"what is the
-steady-state runnable-thread count per core, and does its variance
-explain my p99?"* That question maps directly to the Chapter 5 lab.
+Thread-per-request has real virtues. It is simpler to debug, easier
+to reason about under failure, and on hardware where requests are
+CPU-bound (image transcoding, ML inference) it can win because
+runtime overhead per task is zero. The question to ask in a code
+review is not *"is this async?"* but *"what is the steady-state
+runnable-thread count per core, and does its variance explain my
+p99?"* That question maps directly to the Chapter 5 lab.
 
 A cheat sheet for the three concurrency models you will see in
 practice:
@@ -604,12 +604,11 @@ practice:
 | Failure mode | runqueue depth → scheduling-latency tail (this chapter's lab) | scheduler-runtime contention; "`runtime: too many sleeping goroutines`" | one CPU-bound task starves the loop; latency spikes everywhere |
 | Real systems | Apache prefork, Tomcat, Java pre-21, gunicorn `--workers` | Kubernetes control plane, Docker, etcd, CockroachDB, most Go services | Node.js, Nginx, Envoy data plane, Python `asyncio`, Rust Tokio |
 
-The table is not a verdict. Each row is a *consequence* of the
-stack-and-scheduling choice. When you tune the wrong knob —
-trying to lower a Goroutine-runtime contention spike with kernel
-schedtune, or fixing an event-loop CPU-bound stall with more OS
-threads — you are reading the wrong row of this table for your
-workload.
+Each row of the table is a *consequence* of the stack-and-scheduling
+choice rather than a ranking. When you tune the wrong knob — trying
+to lower a Goroutine-runtime contention spike with kernel schedtune,
+or fixing an event-loop CPU-bound stall with more OS threads — you
+are reading the wrong row for your workload.
 
 The lab at the end of this chapter is a minimal scheduling-latency
 experiment: a periodic probe that measures how late it wakes up,

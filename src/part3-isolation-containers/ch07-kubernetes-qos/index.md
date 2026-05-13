@@ -137,9 +137,11 @@ determines two things:
 2. The **order in which the kubelet evicts Pods** when node-level
    resources run low. BestEffort → Burstable → Guaranteed.
 
-> **Key insight:** QoS is not a priority knob you tune. It is a
-> *label computed from your resource fields.* To get Guaranteed,
-> set `requests == limits`. Nothing else.
+> **Key insight:** QoS is *derived*, not configured. The kubelet
+> computes the class label from the `requests` and `limits` you
+> set; the API has no `qosClass` field you can write. To get
+> Guaranteed, set `requests == limits` on every container in the
+> Pod.
 
 You can verify a Pod's class:
 
@@ -167,11 +169,11 @@ resumes them at the next boundary.
 
 ### Why this hurts latency
 
-Throttling is not rate-limiting in the graceful sense. The Pod
-consumes its quota, hits the wall, and stops *hard* until the next
-period. A request that arrives during the throttled window sees the
-process go off-CPU for up to 100 ms at a time — a classic tail-
-latency killer.
+Throttling stops the Pod hard. Once the quota for the current
+period is gone, the cgroup goes off-runqueue until the next period
+boundary. A request that arrives during the throttled window sees
+the process go off-CPU for up to 100 ms at a time — a classic
+tail-latency killer.
 
 ![CFS throttling timeline: a Pod with cpu.max 50000/100000 runs for 50 ms then is throttled for 50 ms each period; a request arriving during the throttled window waits until the next period](figures/cfs-throttling-timeline.svg)
 *Figure 7.2: CFS bandwidth throttling in action. A Pod with `limits.cpu: "500m"` gets 50 ms of CPU per 100 ms period. When it exhausts the quota, it stops hard. A request arriving during the throttled window pays the full remaining wait — this is where the tail latency comes from.*
@@ -367,8 +369,8 @@ placement decisions side-by-side.
 
 Key takeaways from this chapter:
 
-- Kubernetes does not replace cgroups — it *declares* them. A Pod
-  is a cgroup; its resource fields become `cpu.max`,
+- Kubernetes *declares* cgroups; the kernel still enforces them.
+  A Pod is a cgroup, and its resource fields become `cpu.max`,
   `memory.max`, and so on. "Kubernetes decides, kubelet
   translates, Linux enforces."
 - `requests` and `limits` do different jobs.

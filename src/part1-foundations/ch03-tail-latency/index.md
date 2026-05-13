@@ -20,12 +20,12 @@ not down. Its median request still completes in 3 ms. CPU is only moderately
 busy. The dashboard looks almost boring until one line stands out: p99 has
 jumped from 20 ms to 540 ms.
 
-This chapter uses that symptom as a case study, not as a complete survey of
-tail latency. The mechanism is deliberately narrow: a service's working set
-has grown close to its memory limit, the kernel reclaims pages, and rare
-requests later touch pages that are no longer resident. Those unlucky
-requests incur major faults and wait off-CPU, so p99 rises while p50 remains
-stable.
+This chapter walks one specific path into that symptom. A service's
+working set has grown close to its memory limit, the kernel reclaims
+pages, and rare requests later touch pages that are no longer resident.
+Those unlucky requests incur major faults and wait off-CPU, so p99 rises
+while p50 holds steady. The job for the rest of the chapter is to turn
+that single incident into a defensible diagnosis.
 
 Chapter 2 taught measurement on one program and introduced working sets,
 page faults, and memory pressure. Chapter 3 asks how the same mechanisms
@@ -84,8 +84,9 @@ That is the normal shape of production latency bugs.
 ![Latency distribution histogram with percentile markers showing p50 at 5ms, average at 15ms, p95 at 50ms, p99 at 200ms, and p99.9 at 500ms](figures/latency_distribution_percentiles.png)
 *Figure 3.2: A typical long-tail latency distribution. The median looks healthy. The mean is already misleading. The p99 and p99.9 reveal the user-facing risk.*
 
-> **Key insight:** Tail latency is not average slowness. It is usually a
-> mostly healthy fast path plus a rare slow path with a large fixed cost.
+> **Key insight:** Tail latency usually comes from a mostly healthy fast
+> path plus a rare slow path with a large fixed cost. The average hides
+> both halves of that story.
 
 ## 3.2 What do percentiles and histograms hide?
 
@@ -137,10 +138,10 @@ measurement method can see the tail.
 
 ## 3.3 Why does memory pressure turn into waiting?
 
-Tail latency is usually queueing made visible. In this chapter's case study,
-the queue is not an application work queue. It is the wait behind memory
-management: reclaim, swap or storage-backed page supply, and the blocked
-request that cannot continue until the page is resident.
+Tail latency is usually queueing made visible. The queue in this
+chapter's case study sits below the application: reclaim, swap or
+storage-backed page supply, and the blocked request that cannot continue
+until the page is resident.
 
 A **queue** forms when work arrives faster than a resource can serve it for
 some interval. The resource may be memory reclaim, a storage device supplying
@@ -179,11 +180,11 @@ question is simpler: where is the queue, and what signal shows it?
 
 ## 3.4 Where does the memory slow path fit among OS queues?
 
-Most services have a fast path and several rare slow paths. The fast path is
-computation on warm data with no blocking. In this chapter, the slow path is
-memory pressure: reclaim and major faults. Other OS queues are listed here so
-you can rule them out, not because this chapter will teach all of them in
-depth.
+Most services have a fast path and several rare slow paths. The fast path
+is computation on warm data with no blocking. The slow path in this
+chapter is memory pressure: reclaim and major faults. The other OS
+queues appear in the table below so you can rule them out during the
+worked incident. Each of them gets its own chapter later in the book.
 
 | Slow path | What waits? | First observations |
 |---|---|---|
@@ -287,8 +288,8 @@ A good evidence chain has this form:
 8. **Verification:** tail recovers and the mechanism-aligned signal returns
    toward baseline.
 
-The exclusion step is where many weak write-ups fail. Without it, you do not
-have a diagnosis; you have a plausible story.
+The exclusion step is where many weak write-ups fail. Skip it and the
+diagnosis collapses into a plausible story.
 
 A short operational map:
 
@@ -373,16 +374,20 @@ That explains the observed shape: p50 remains acceptable while p99 spikes.
 
 ### Step 6: Mitigate and verify
 
-A production-minded response is not just "raise the limit." It is:
+A production-minded response has four parts:
 
 - apply the least risky mitigation first, such as modestly raising
   `memory.max`;
 - watch both the user-facing metric and the mechanism-aligned signal;
-- confirm that p99 and `pgmajfault` move together in the expected direction;
-- follow up with a working-set reduction, cache warmup change, or placement
-  fix so the extra memory does not become permanent folklore.
+- confirm that p99 and `pgmajfault` move together in the expected
+  direction;
+- follow up with a working-set reduction, cache warmup change, or
+  placement fix so the extra memory does not become permanent folklore.
 
-An example before/after table makes the verification logic explicit:
+Raising the limit and walking away is the version that breeds the next
+incident.
+
+A before/after table makes the verification logic explicit:
 
 | Metric | Before | After |
 |---|---:|---:|
@@ -391,7 +396,7 @@ An example before/after table makes the verification logic explicit:
 | `pgmajfault` / min | 1,200 | 25 |
 | `memory.current / memory.max` | 95% | 72% |
 
-The exact numbers will differ in real incidents. The structure should not.
+Numbers will differ in real incidents; the structure should hold.
 
 ## 3.8 How do memory-pressure mitigations fail?
 
