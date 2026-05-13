@@ -75,7 +75,7 @@ This repository includes a local check script at
 `code/ch01-envcheck/env_check.sh`.
 
 ```bash
-bash code/ch01-envcheck/env_check.sh | tee lab0_env_check.txt
+bash code/ch01-envcheck/env_check.sh | tee lab-env-check.txt
 ```
 
 The script prints `[OK]`, `[WARN]`, or `[ERROR]` lines. Fix every
@@ -111,7 +111,7 @@ lsblk -d
 
 - [ ] Ubuntu boots reliably
 - [ ] `code/ch01-envcheck/env_check.sh` runs and produces
-      `lab0_env_check.txt`
+      `lab-env-check.txt`
 - [ ] `sudo perf stat true` works
 - [ ] `strace`, `valgrind`, and `node` are available
 - [ ] Machine fingerprint captured in the report
@@ -120,7 +120,7 @@ lsblk -d
 
 ### B.1 Write a Prediction Before You Run Anything
 
-Create a short section in `lab0_report.md` titled **Prediction** and answer:
+Create a short section in `lab-env-report.md` titled **Prediction** and answer:
 
 1. Which system call do you expect will actually send bytes to the terminal?
 2. Do you expect the program below to show many context switches? Why or why
@@ -292,8 +292,8 @@ Submit a ZIP archive containing:
 
 | File | Required? | Purpose |
 |---|---|---|
-| `lab0_report.md` | Yes | prediction, environment record, results, interpretation |
-| `lab0_env_check.txt` | Yes | raw environment-check output |
+| `lab-env-report.md` | Yes | prediction, environment record, results, interpretation |
+| `lab-env-check.txt` | Yes | raw environment-check output |
 | `strace_hello.txt` | Yes | raw syscall trace |
 | `perf_run1.txt`, `perf_run2.txt`, `perf_run3.txt` | Yes | raw counter output |
 | `hello.c` | Yes | measured program |

@@ -32,11 +32,10 @@
 >   identity each one attacks
 
 AI agents are the newest system in this book, but from the OS
-perspective they are surprisingly familiar. An agent is a loop
-that receives input, decides on an action, invokes a *tool*,
-observes the result, and continues. Replace "tool" with
-"syscall" and the picture is identical to a user process talking
-to a kernel. The runtime engineer who owns this loop has to
+perspective the structure is familiar. An agent is a loop that
+receives input, decides on an action, invokes a *tool*, observes
+the result, and continues. Replace "tool" with "syscall" and the
+picture is identical to a user process talking to a kernel. The runtime engineer who owns this loop has to
 answer the same two questions every OS designer answers about
 any new substrate: **is it safe?** and **is it fast enough?**
 
@@ -128,8 +127,8 @@ An infinite tool-call loop is a fork bomb.
 
 > **Key insight:** Once you see "tool call" as "syscall", every
 > classical OS defense — capability systems, seccomp,
-> namespaces, audit — becomes a candidate mitigation. The job is
-> not inventing new techniques; it is applying the existing ones
+> namespaces, audit — becomes a candidate mitigation. The job
+> for the runtime engineer is to apply the existing techniques
 > to this new boundary.
 
 ## 12.3 What is the threat model?
@@ -200,10 +199,10 @@ guardrails is what makes agent safety a security problem.
 
 ### A documented production incident: EchoLeak (Microsoft 365 Copilot, 2025)
 
-The attacks above are not hypothetical. The cleanest published
-example is **EchoLeak** (Aim Security, CVE-2025-32711, disclosed
-June 2025), which earned the first "critical" agent-security
-CVE rated 9.3/10. The mechanism is exactly the
+The attacks above have already happened in production. The
+cleanest published example is **EchoLeak** (Aim Security,
+CVE-2025-32711, disclosed June 2025), which earned the first
+"critical" agent-security CVE rated 9.3/10. The mechanism is exactly the
 indirect-prompt-injection → confused-deputy → exfiltration chain
 laid out above:
 
@@ -485,10 +484,10 @@ agents, the per-tool overhead matters more; a common
 optimization is to reuse a pre-forked sandbox pool instead of
 forking fresh every time.
 
-No isolation layer is free, but the expensive ones (fork, namespace
-setup) are mostly one-time setup. A running agent that
-invokes many short tools pays the setup cost once per pool
-worker, not per call.
+Every isolation layer costs something, but the expensive ones
+(fork, namespace setup) are mostly one-time setup. A running
+agent that invokes many short tools pays the setup cost once per
+pool worker, not per call.
 
 ---
 
@@ -681,7 +680,7 @@ In production you do not hand-write a tracer. You install an
 auto-instrumentation library — OpenLLMetry, OpenInference, the
 OpenAI Agents SDK's built-in tracing, LangChain's tracing — and
 get `gen_ai.*` spans for free, then ship them over OTLP to a
-backend. The Lab F starter writes a 30-line `Tracer` class
+backend. The Lab 12B starter writes a 30-line `Tracer` class
 because `Instrumentor().instrument()` is magic until you have
 seen what a span actually is. Once you have written one, the
 dashboard's UI is just a renderer over data you understand.
@@ -729,7 +728,7 @@ fires. The defense is the same as for any livelock: bound the
 loop, instrument the bound, alert on saturation.
 
 The pattern-recognition skill is what separates fluent
-profilers from people who just stare at numbers. Lab F asks you
+profilers from people who just stare at numbers. Lab 12B asks you
 to produce a trace and name which of these four patterns it
 shows.
 
@@ -913,9 +912,10 @@ Key takeaways from this chapter:
 - An agent's tool-calling loop is a system-calls problem with a
   new wrapper. The OS isolation techniques from Chapter 6
   (namespaces, cgroups, seccomp) are the right starting point.
-- Prompt injection and confused deputy are not hypothetical —
-  they are the dominant real-world agent failure modes.
-  Defenses must assume the model's instructions can be adversarial.
+- Prompt injection and confused deputy are the dominant
+  real-world agent failure modes (EchoLeak, CVE-2025-32711, is
+  the canonical published example). Defenses must assume the
+  model's instructions can be adversarial.
 - Defense layers: allowlist tool names and argument shapes,
   canonicalize and validate arguments, log every call (including
   blocked ones), isolate execution per-call with fork + namespaces
@@ -1013,6 +1013,6 @@ Key takeaways from this chapter:
   §12.12.3.)
 - OpenLLMetry, OpenInference, Arize Phoenix, Langfuse —
   production OTel auto-instrumentation libraries and trace
-  backends. The tracer in Lab F is a 30-line model of what
+  backends. The tracer in Lab 12B is a 30-line model of what
   these provide; once you have written it, the production
   libraries become inspectable rather than magical.

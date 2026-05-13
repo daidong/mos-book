@@ -21,7 +21,6 @@ Key files to know:
 - `theme/css/academic.css` — the entire visual style overlay
 - `theme/head.hbs` — Google Fonts, OG tags
 - `STYLE_GUIDE.md` — markdown conventions, callout grammar, code blocks
-- `PLAN.md` — chapter-by-chapter writing status
 - `Makefile` — `make html`, `make serve`, `make pdf`, `make check`
 
 ## Build & Preview

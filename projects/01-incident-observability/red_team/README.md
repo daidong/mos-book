@@ -2,18 +2,22 @@
 
 This folder is **optional scaffolding**: it gives you templates and starter scripts for building reproducible incident scenarios.
 
-You are expected to create **3 scenarios** (and exchange them with a Blue team). In this course, the *minimum* expected level is **MS baseline**.
+You are expected to create **3 scenarios** and exchange them with a
+Blue team.
 
 ## Required scenario coverage (3 buckets)
 
 Your 3 scenarios must collectively cover:
 
-1) **Scheduling / concurrency** (Week 3–4)
-   - examples: runqueue delay, noisy neighbor on same CPU, lock convoying, timer wakeup delays
-2) **cgroup v2 resource boundary** (Week 5–6)
-   - examples: CPU quota throttling (`cpu.max`), memory limit (`memory.max`) → reclaim/OOM
-3) **Storage / writeback tail latency** (Week 8)
-   - examples: background `fsync` writer, writeback bursts, IO saturation
+1) **Scheduling / concurrency** (book Chapters 4–5)
+   - examples: runqueue delay, noisy neighbor on the same CPU, lock
+     convoying, timer wakeup delays
+2) **cgroup v2 resource boundary** (book Chapters 6–7)
+   - examples: CPU quota throttling (`cpu.max`), memory limit
+     (`memory.max`) → reclaim or OOM
+3) **Storage / writeback tail latency** (book Chapter 10)
+   - examples: background `fsync` writer, writeback bursts, IO
+     saturation
 
 ## Scenario structure (recommended)
 

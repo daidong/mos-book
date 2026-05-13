@@ -575,7 +575,7 @@ ip -s link show eth0    # per-interface counters
 
 ## B.9 Agent and trace observability
 
-Used in Chapter 12 Lab F. None of these need to be installed by
+Used in Chapter 12, Lab 12B. None of these need to be installed by
 hand; the lab implements a minimal tracer in 30 lines of Python.
 In production you would use one of:
 

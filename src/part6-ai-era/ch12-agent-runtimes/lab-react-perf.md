@@ -1,4 +1,4 @@
-# Lab F: Profile and Optimize a ReAct Agent
+# Lab 12B: Profile and Optimize a ReAct Agent
 
 > **Estimated time:** 4–6 hours
 >
@@ -500,7 +500,7 @@ grep '"tool.cache": "miss"' traces/cached.jsonl | wc -l
 ## Final Deliverable: `perf_report.md`
 
 ```text
-# Lab F Report
+# Lab 12B Report
 
 Name: ...
 Date: ...

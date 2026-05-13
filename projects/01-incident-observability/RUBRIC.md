@@ -1,135 +1,160 @@
-# Project 01 评分细则（Rubric）— Red/Blue Oncall Game
+# Project 01 Rubric — Red/Blue Oncall Game
 
-本文件回答三件事：
-1) **做到什么程度算完成**；
-2) **怎么给分**（可操作的扣分/加分点）；
-3) **本项目的核心难点是什么**（避免学生把力气用错地方）。
+This rubric answers three things:
 
-> 课程定位：研究生 OS 课。
-> **本项目的最低要求按 MS 档执行**；低于 MS 档的产出属于“未达基线”。
+1. What "complete" looks like for this project.
+2. How to grade it (concrete deduction and bonus points).
+3. Where the real difficulty lives, so effort lands in the right place.
 
----
-
-## 0) 工作量预期与分档（以 MS 为基线）
-
-本项目可以做得很深，但本课希望它仍然是 **10 周、1–2 人、VM 友好** 的系统 case study。
-
-我们仍保留三档描述，便于解释“做到什么程度算 A/A+”，但请注意：
-
-- **MS 档 = 基线（应当达标）**：达到此档才算“完成项目”
-- **PhD 档 = 加分/研究型**：更系统、更工程化
-- **UG 档 = 低于本课基线**：只能作为部分得分参考（不推荐）
-
-### UG 档（低于基线，仅供参考）
-- 能复现，但证据链不完整；
-- 只能给出 1 条信号或主要靠猜测；
-- 缓解缺少严格 before/after。
-
-### MS 档（基线 / 标准完成）
-- 3 个场景都 **可诊断**：证据契约（evidence contract）真的能指向真相；
-- **每个场景**：
-  - 至少 **2 条独立支持信号** + **1 条反证/排除项（negative control）**
-  - 至少 1 个 mitigation，并用 **before/after p50/p95/p99** + **机制指标**验证
-- 场景覆盖三类机制（与课程周次对齐）：
-  1) 调度/并发（Week 3–4）
-  2) cgroup v2 资源边界（Week 5–6）
-  3) 存储/写回 tail（Week 8）
-
-### PhD 档（研究型 / extra credit）
-- 场景设计具备“反作弊/防猜”体系；
-- 评分与复盘更系统（时间线、决策日志、错误动作惩罚）；
-- 对方法学做反思：VM 限制、不可用信号、鲁棒性对照。
+The rubric is one tier. The same standard applies whether the team is
+two students or a single graduate student; team size only changes the
+expected breadth of the scenario pack, not the standard for each
+scenario.
 
 ---
 
-## 1) 必交（缺一项则明显扣分/封顶）
+## 1. Required deliverables (a missing item caps the project's grade)
 
-红/蓝都必须满足：
+Red and Blue teams both must satisfy:
 
-- **可复现性**：干净 VM 上，一条命令能跑通（或明确 3 步以内），并产出可提交结果包（raw logs + metrics + plots）。
-- **指标定义**：至少一个用户可感知指标（p99 latency / error rate / saturation 指标），并说明采集口径。
-- **证据链**：不允许只写“我猜是 X”。必须写清楚“现象 → 资源 → 机制”。
-- **环境记录**：`uname -r`、VM/裸机、资源配置（vCPU/RAM）。
+- **Reproducibility.** A clean VM runs the scenario (or diagnosis
+  workflow) end-to-end with one command or no more than three steps,
+  and produces an artifact bundle: raw logs, parsed metrics, plots.
+- **Metric definitions.** At least one user-facing metric
+  (p99 latency / error rate / a saturation metric), with the
+  collection method documented.
+- **Evidence chain.** "I think it's X" is not acceptable. Every
+  finding follows the chain *symptom → suspect resource → mechanism*.
+- **Environment record.** `uname -r`, host type (bare metal / VM / cloud
+  instance), resource budget (vCPU, RAM).
 
----
+Every scenario (Red-authored, Blue-solved) must include the **evidence
+contract**:
 
-## 2) 打分方式（建议 100 分制）
+- **Two independent supporting signals**, drawn from different
+  observation layers (e.g., application latency histogram *plus* cgroup
+  `cpu.stat` or PSI).
+- **One negative control** that rules out a plausible alternative
+  explanation.
 
-### 2.1 红队评分（100 分）
+Every mitigation must include:
 
-#### A. 场景包工程质量（30）
--（10）**可复现**：每个场景注入脚本/配置重复运行稳定
--（10）**可回滚/可清理**：跑完能恢复到 baseline（避免“跑一次就脏了”）
--（10）**打包与文档**：场景描述、触发方式、预期现象、如何收集证据写清楚
-
-#### B. 可诊断性设计（40）
--（15）**evidence contract（证据契约）**：每个场景必须包含
-  - 2 条独立支持信号（例如：PSI + cgroup stat；iostat + app histogram）
-  - 1 条 negative control / 排除项（明确说明“为什么不是某个常见替代解释”）
--（10）**不靠魔法**：不依赖 perf PMU cache counter；不依赖“只有作者知道的隐藏输出”
--（10）**难度梯度**：
-  - 场景 1：单因子、信号明显
-  - 场景 2：双因素相互作用
-  - 场景 3：主症状误导（根因在别处）
--（5）**机制覆盖**：三类机制覆盖齐全（调度/并发、cgroup 边界、IO/writeback）
-
-#### C. Ground truth 与机制解释（20）
--（12）ground truth 是**机制级**（例如 reclaim/writeback/throttling/runqueue delay/lock convoy），不是“CPU 高/内存满”
--（8）能解释“为什么是 tail（p99）先坏而不是 p50”
-
-#### D. 评分接口与反作弊（10）
--（6）有可执行/可落地的评分接口（checklist/脚本/人工 rubric 皆可）
--（4）设计了“阻止纯猜测”的规则：必须提交证据截图/日志片段；对 disruptive 操作扣分（无证据重启等）
-
-**红队加分（最多 +10）**：
-- +5：同一根因提供两种注入方式（提高鲁棒性）
-- +5：提供“错误诊断常见路径”与如何避免的说明（教学价值）
+- **Before/after p50/p95/p99** (or at minimum p50/p99).
+- **A mechanism-level metric that moved** in the expected direction
+  (`cpu.stat:throttled_usec`, PSI, `iostat` `await`,
+  `memory.current` / `oom_kill`, etc.).
 
 ---
 
-### 2.2 蓝队评分（100 分）
+## 2. Scoring rubric (100 points)
 
-#### A. 诊断工作台/工作流（25）
--（10）一条命令启动采集/打包（或清晰的 runbook）
--（10）信号面覆盖：至少包含 VM 友好信号（pidstat/vmstat/iostat/ss + PSI + cgroup v2 任意 1 类）
--（5）结果整理：能生成图/表/时间线（notebook 或脚本均可）
+### Red team (100)
 
-#### B. 每个场景的证据链质量（55）
-按 3 个场景平均计分（每个 18~19 分）：
--（7）症状定位到资源层（CPU/内存/IO/网络/锁/队列）
--（7）资源层定位到机制层（例如：CPU quota throttling → runqueue delay；memory limit → reclaim/major faults）
--（4）证据契约达标：**2 条独立信号 + 1 条 negative control**
+#### A. Scenario package quality (30)
+- (10) **Reproducible.** Each injection script runs deterministically.
+- (10) **Cleanable.** Cleanup scripts return the system to baseline so
+  a second run is not corrupted by the first.
+- (10) **Documented.** Scenario description, trigger, expected
+  symptoms, and how to collect evidence are written out.
 
-#### C. 缓解与验证（15）
--（7）每个场景至少一个 mitigation（系统层或应用层均可）
--（8）验证必须包含：
-  - before/after **p50/p95/p99**（或至少 p50/p99）
-  - before/after **机制指标**（例如 cpu.stat throttled_usec、PSI、iostat await、memory.current/oom_kill）
-  - 解释“机制指标怎么变 → 为什么 tail 会变”
+#### B. Diagnosability design (40)
+- (15) **Evidence contract.** Each scenario provides two independent
+  supporting signals plus one explicit negative control.
+- (10) **No magic.** The scenario does not depend on `perf` PMU cache
+  counters (often unavailable in VMs) or on hidden outputs only the
+  author knows about.
+- (10) **Difficulty ladder.**
+  - Scenario 1: single factor, obvious signals.
+  - Scenario 2: two factors interacting.
+  - Scenario 3: misleading primary symptom — the root cause is somewhere
+    other than where the alert points.
+- (5) **Mechanism coverage.** The three scenarios collectively cover
+  scheduling / concurrency, cgroup boundaries, and IO / writeback.
 
-#### D. 报告叙事与复盘质量（5）
--（3）时间线清楚：何时发现、做了什么、为什么、结果如何
--（2）明确 limitations：VM 限制、不可用信号、误差来源
+#### C. Ground truth and mechanism explanation (20)
+- (12) Ground truth is **mechanism-level** (reclaim, writeback,
+  throttling, runqueue delay, lock convoy) — not "CPU is high" or
+  "memory is full".
+- (8) The writeup explains *why p99 degrades before the mean does*
+  (queueing, microbursts, retries amplifying).
 
-**蓝队加分（最多 +10）**：
-- +5：把诊断过程结构化成可复用模板（USE/RED 方法、决策树）
-- +5：对“错误动作”做量化（例如无证据重启导致停机时间增加）
+#### D. Scoring interface and anti-guessing (10)
+- (6) A grading interface that the Blue team can actually run against
+  (checklist, scoring script, or written rubric card).
+- (4) Rules that prevent pure guessing: Blue must submit evidence
+  artifacts; disruptive actions taken without evidence lose points.
+
+**Red team bonuses (max +10).**
+- +5: Two distinct injection paths to the same root cause (improves
+  robustness against accidental Blue-team workarounds).
+- +5: A "common wrong diagnosis paths" writeup with how to avoid them
+  (pedagogical value).
+
+### Blue team (100)
+
+#### A. Diagnosis workbench / workflow (25)
+- (10) One command (or a short, clear runbook) starts collection.
+- (10) Signal coverage: at least one VM-friendly source from each of
+  process-level (`pidstat` / `vmstat` / `iostat` / `ss`), PSI, and
+  cgroup v2.
+- (5) Result organization: plots, tables, or a timeline (notebook or
+  scripted, either is fine).
+
+#### B. Evidence chain per scenario (55)
+Averaged across the three scenarios (~18 per scenario):
+- (7) Symptom → suspect resource layer (CPU / memory / IO / network /
+  lock / queue).
+- (7) Resource → mechanism (CPU quota throttling → runqueue delay;
+  memory limit → reclaim or major faults; etc.).
+- (4) Two independent signals + one negative control.
+
+#### C. Mitigation and validation (15)
+- (7) At least one mitigation per scenario, system-level or
+  application-level.
+- (8) Validation includes:
+  - Before/after p50 / p95 / p99 (or at minimum p50 / p99),
+  - Before/after of a mechanism-level metric
+    (`throttled_usec`, PSI, `iostat await`, `memory.current` /
+    `oom_kill`),
+  - A sentence connecting "the mechanism metric moved like this →
+    therefore the tail moved like that".
+
+#### D. Report and retrospective (5)
+- (3) A clear timeline: what was observed, what was tried, why, and
+  what changed.
+- (2) Explicit limitations: VM measurement noise, signals that were
+  unavailable, sources of bias.
+
+**Blue team bonuses (max +10).**
+- +5: A reusable diagnosis template (USE / RED method, decision tree,
+  triage flowchart).
+- +5: Quantified cost of "wrong actions" (e.g., how much downtime an
+  evidence-free restart added).
 
 ---
 
-## 3) 本项目核心难点（写给学生/助教）
+## 3. Where the difficulty actually lives
 
-1) **“可诊断的场景设计”比“做坏系统”难**：很多注入能让系统慢，但没有稳定、可解释的证据链。
-2) **机制级 ground truth**：要能把现象落到具体 OS 机制（throttling/reclaim/writeback/runqueue/锁等）。
-3) **可复现与对抗噪声**：VM 环境噪声大、perf PMU 常不可用，必须用更鲁棒的信号（PSI/cgroup/proc）构建证据。
+Three things are harder than they look. Spend effort here.
+
+1. **Designing a scenario that is *diagnosable*** — not just one that
+   makes the system slow. Many injections produce slowdowns whose
+   evidence chain is too noisy to be solved reliably.
+2. **Mechanism-level ground truth.** Pinning the symptom to a specific
+   OS mechanism (throttling, reclaim, writeback, runqueue delay, lock
+   convoy) is the hard part — naming the resource that ran out is not.
+3. **Reproducibility under VM noise.** VMs are noisy, `perf` PMU
+   counters are often unavailable. Robust evidence chains use PSI,
+   cgroup, and `/proc` rather than depending on hardware events.
 
 ---
 
-## 4) 交付物清单（助教验收用）
+## 4. Submission checklist
 
-- `run.sh` / `make run`（一键跑）
-- `REPRODUCE.md`（干净 VM 复现步骤）
-- Red：场景包（含 inject/cleanup + evidence contract + ground truth）
-- Blue：诊断工作台（collect + analyze + report generator）
-- `results/`：原始日志 + 解析后的图/表/时间线
-- 报告与 slides
+- `run.sh` (or `make run`): one-command end-to-end execution.
+- `REPRODUCE.md`: clean-VM reproduction steps and dependencies.
+- Red: scenario pack with `INJECT.sh`, `CLEANUP.sh`, `SCENARIO.md`,
+  `GROUND_TRUTH.md`, `EVIDENCE_CONTRACT.md` per scenario.
+- Blue: diagnosis workbench (collect, analyze, report generator).
+- `results/`: raw logs, parsed plots and tables, timeline.
+- Final report and presentation slides.

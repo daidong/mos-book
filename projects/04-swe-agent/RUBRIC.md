@@ -1,95 +1,115 @@
-# Project 04 评分细则（Rubric）— SWE-agent 全链路 Profiling（把 Agent Runtime 当系统）
+# Project 04 Rubric — Full-stack Profiling of SWE-agent (Agent Runtime as a System)
 
-本项目的“系统”不是 Linux 内核本身，而是 **Agent + 工具调用 + 子进程 + IO +（可选）远端模型** 的组合。
+The "system" here is not the Linux kernel by itself. It is the
+combination of *agent + tool calls + subprocesses + IO + (optionally)
+remote model calls*.
 
-> 课程定位：研究生 OS 课。  
-> **最低要求按 MS 档执行**；低于 MS 档的产出属于“未达基线”。
-
----
-
-## 0. 分档（以 MS 为基线）
-
-### UG 档（低于基线，仅供参考）
-- 任务能跑但日志/分析管线不足；
-- quota/memory 实验不全或缺少机制解释。
-
-### MS 档（基线 / 标准完成）
-- 10–20 个任务 pack；
-- 时间分解（LLM 等待/工具执行/本地 CPU）齐全；
-- CPU quota + memory limit 都完成；
-- 至少 1 个策略/缓解能减少失败率或减少时间，并有对照；
-- 每个资源实验都满足“证据三件套”（**硬门槛**，缺一项视为该实验未完成）：
-  1) **两条独立证据（跨层次观测）**：至少跨两层（agent/应用层日志指标 + OS/资源控制指标）。
-     - 例：agent 时间分解/成功率 + cgroup/PSI/pidstat/iostat
-  2) **一条排除性对照（控制变量/反例）**：明确说明“为什么不是某个常见替代解释”。
-     - 例：`iostat` 稳定→排除 IO；没有 OOM/PSI memory 低→排除“其实是内存抖动”
-  3) **before/after + 机制指标**：至少一个主要指标（成功率/总时长/成本）before/after，并展示一个机制指标随之变化（throttled time、PSI、memory.current/OOM 等）
-
-### PhD 档（研究型/加分）
-- 形成“失败模式 taxonomy”并量化；
-- 对策略做安全性/可用性权衡；
-- 做 ablation 并解释机制。
+This rubric is one tier. The same standard applies to every submission.
 
 ---
 
-## 1. 必交（否则上限封顶）
+## 1. Required deliverables (a missing item caps the grade)
 
-- **任务包（10–20）**：每个任务有 success criterion + timeout。
-- **可机读日志（JSONL）**：至少记录每次 tool call 的开始/结束时间、命令/参数摘要、退出码。
-- **资源实验（cgroup v2）**：CPU quota + memory limit 都要做。
-- **成本/外部依赖透明**：若用远端 LLM API，必须写明模型、参数、成本上限与实际花费估计。
-- **环境记录**：`uname -r`、VM 配置、SWE-agent 版本与依赖版本。
+- **Task pack (10–20 tasks).** Each task includes input repo / issue,
+  a success criterion, and a timeout budget.
+- **Machine-readable log (JSONL).** Each tool call records start /
+  end timestamps, command and argument summary, and exit code.
+- **Resource experiments (cgroup v2).** Both CPU quota and memory limit.
+- **External-cost transparency.** If a remote LLM API is used, the
+  report names the model, the parameters, the cost cap, and the actual
+  spend estimate.
+- **Environment record:** `uname -r`, VM configuration, SWE-agent
+  version, dependency versions.
 
----
+Every resource experiment must satisfy the **evidence contract**:
 
-## 2. 打分方式（100 分制建议）
-
-### A. Benchmark pack 质量（20）
--（8）任务定义清晰：输入 repo/issue、成功判定、超时
--（7）可复现：相同版本/相同环境下结果稳定（至少能稳定复现“成功/失败类型”）
--（5）覆盖面：任务类型不全是同一种
-
-### B. Profiling/日志与分析管线（30）
--（10）日志 schema 合理：能重放、能统计（tool、LLM、tests、git 等）
--（10）时间分解可信：能区分等待时间与本地执行时间
--（10）自动化分析：能产出至少 3 类指标（总时长、成功率、tool 占比/失败原因分布）
-
-### C. 资源约束实验与机制解释（30）
--（15）CPU quota：
-  - 指标变化（总时长/成功率/某些 tool 占比变化）
-  - 两条独立证据（跨层次观测；cpu.stat throttling + pidstat -w/PSI cpu/agent loop 证据 等）
-  - 一条排除性对照（例如：`iostat` 稳定→排除 IO）
-  - 机制解释（throttling 如何影响 agent loop、测试/构建等）
--（15）memory limit：
-  - OOM/回收/抖动信号（memory.current/memory.stat + PSI memory 等）
-  - 两条独立证据 + 一条排除性对照
-  - 机制解释（依赖安装、编译、测试时的内存峰值与失败）
-
-### D. 策略/缓解与验证（20）
--（10）提出并实现至少 1 个策略/缓解（timeouts、tool allowlist、缓存依赖、重试上限等）
--（10）用对照实验验证：对成功率/时长/成本的影响（至少 1 个主要指标）
-
-缓解验证必须包含：before/after + 一个机制指标随之变化。
-
-**加分（最多 +10）**：
-- +5：失败模式 taxonomy 做得像小论文（定义清楚、可自动分类、有例子）
-- +5：对“策略导致的副作用”做量化并提出改进
+1. **Two independent supporting signals** drawn from different
+   observation layers. At least one agent / application-level signal
+   (time breakdown, success rate, failure-mode distribution) and at
+   least one OS / resource-control signal (cgroup, PSI, `pidstat`,
+   `iostat`).
+2. **One negative control** ruling out a plausible alternative
+   (`iostat` stable → not IO; no OOM and PSI memory low → not a memory
+   limit issue dressed up as something else).
+3. **Before/after + a mechanism-level metric.** At least one primary
+   outcome (success rate, total runtime, cost) moves measurably, and a
+   mechanism metric (`throttled_usec`, PSI, `memory.current`, OOM
+   events) moves consistently with the explanation.
 
 ---
 
-## 3. 本项目核心难点
+## 2. Scoring rubric (100 points)
 
-1) **把 agent 行为变成可度量系统**：没有良好日志与 schema，后面所有结论都站不住。
-2) **外部变量太多**：远端模型、网络、依赖安装都会引入噪声；难点是控制变量并做可重复对照。
-3) **机制解释而非“经验总结”**：必须用 OS/cgroup/PSI 信号说明资源约束如何导致具体失败模式（OOM、超时、循环）。
+### A. Benchmark pack quality (20)
+- (8) Clear task definitions: input repo or issue, success criterion,
+  timeout.
+- (7) Reproducibility: under the same agent version and environment,
+  the *type* of outcome (success / failure mode) is stable.
+- (5) Coverage: tasks are not all the same kind.
+
+### B. Profiling, logging, and analysis pipeline (30)
+- (10) Reasonable log schema: replayable, statable (tool, LLM, tests,
+  git, etc.).
+- (10) Credible time decomposition that distinguishes waiting from
+  local execution.
+- (10) Automated analysis producing at least three metric categories:
+  total runtime, success rate, and either tool-call share or
+  failure-mode distribution.
+
+### C. Resource-constraint experiments and mechanism explanation (30)
+
+**CPU quota (15)**
+- Outcome metric changes (total runtime, success rate, shifts in
+  tool-call share).
+- Two independent cross-layer signals (e.g., `cpu.stat` throttling +
+  `pidstat -w` / PSI CPU / agent-loop evidence).
+- One explicit negative control (e.g., `iostat` stable → not IO).
+- Mechanism explanation: how throttling affects the agent loop, test
+  execution, and builds.
+
+**Memory limit (15)**
+- OOM / reclaim / jitter signals (`memory.current`, `memory.stat`,
+  PSI memory).
+- Two independent signals + one negative control.
+- Mechanism explanation: memory peaks during dependency install,
+  compilation, or test execution, and the resulting failure mode.
+
+### D. Strategy / mitigation and validation (20)
+- (10) Implement at least one strategy or mitigation: timeouts,
+  tool allowlist, dependency caching, retry caps.
+- (10) Controlled-comparison validation showing the effect on at
+  least one primary metric (success rate, total runtime, cost).
+
+Every mitigation must show before/after on a primary metric plus a
+mechanism-level metric moving consistently.
+
+**Bonuses (max +10)**
+- +5: A failure-mode taxonomy written like a small paper —
+  defined precisely, auto-classifiable, illustrated with examples.
+- +5: Quantified side effects of a strategy (e.g., "fewer loops but
+  lower success rate") and a proposed refinement.
 
 ---
 
-## 4. 交付物清单
+## 3. Where the difficulty actually lives
 
-- `tasks/`：任务定义与输入仓库
-- `runner/`：运行脚本（支持单任务与批量）
-- `collect/`：OS/cgroup/PSI 采集
-- `analyze/`：解析 JSONL → 图/表/摘要
-- `results/`：原始日志 + 汇总结果
-- 报告与 slides
+1. **Turning agent behavior into a measurable system.** Without a
+   logging schema and an analysis pipeline, every later conclusion
+   sits on sand.
+2. **Controlling external variables.** Remote models, network, and
+   dependency installs inject noise. Holding variables and running
+   controls is the project's craft.
+3. **Mechanism explanation, not empirical hand-waving.** "Resource
+   limits cause specific failure modes (OOM, timeout, loop)" must be
+   demonstrated through OS / cgroup / PSI signals.
+
+---
+
+## 4. Submission checklist
+
+- `tasks/`: task definitions and input repositories.
+- `runner/`: run scripts (single-task and batch).
+- `collect/`: OS / cgroup / PSI collection.
+- `analyze/`: JSONL → plots / tables / summary.
+- `results/`: raw logs and aggregated outputs.
+- Final report and presentation slides.

@@ -1,4 +1,4 @@
-# Evidence contract (MS baseline)
+# Evidence contract
 
 ## Supporting signal #1 (required)
 - cgroup v2 stats:

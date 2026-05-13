@@ -53,7 +53,7 @@ relevant dimension:
 No system wins on every dimension. **The tradeoffs are the
 lesson.**
 
-![Storage design map positioning Redis, etcd, LSM-based systems, and object stores on axes of latency, durability, consistency, and cost](figures/week10b-design-map.svg)
+![Storage design map positioning Redis, etcd, LSM-based systems, and object stores on axes of latency, durability, consistency, and cost](figures/design-map.svg)
 *Figure 11.1: The storage design landscape. Each system occupies a different region of the latency–durability–consistency–cost space. No single design wins everywhere.* A cache is fast and lossy; an object store is slow and
 nearly indestructible; everything in between is a negotiation.
 
@@ -163,7 +163,7 @@ bbolt B+ tree                          ← apply committed entry
 ACK to client
 ```
 
-![etcd write and watch path: client Put flows through Raft proposal to WAL fsync to bbolt apply; Watch streams revisions to controllers](figures/week10b-etcd-write-watch.svg)
+![etcd write and watch path: client Put flows through Raft proposal to WAL fsync to bbolt apply; Watch streams revisions to controllers](figures/etcd-write-watch.svg)
 *Figure 11.2: The etcd write and watch path. Writes flow through Raft consensus to the WAL and then to bbolt. Watch streams revisions to controllers — this is the mechanism behind Kubernetes's reconciliation loops.*
 
 Two persistence layers:
@@ -208,7 +208,7 @@ Redis occupies a different point on the spectrum: primary
 storage is RAM, and durability is *optional*. Two complementary
 mechanisms.
 
-![Redis architecture: all data in RAM; RDB takes periodic fork+COW snapshots; AOF appends every command to a log with tunable fsync](figures/week10b-redis-architecture.svg)
+![Redis architecture: all data in RAM; RDB takes periodic fork+COW snapshots; AOF appends every command to a log with tunable fsync](figures/redis-architecture.svg)
 *Figure 11.3: Redis architecture. Primary data lives in RAM for sub-millisecond access. RDB and AOF provide two orthogonal durability paths — one snapshot-based, one log-based.*
 
 ### RDB: periodic snapshots via fork + COW
@@ -355,7 +355,7 @@ as a sorted, immutable file (an **SSTable**, the format Bigtable
 introduced). Background **compaction** merges overlapping
 SSTables to reclaim space and keep read amplification bounded.
 
-![LSM tree lifecycle: writes to memtable, flush to L0 SSTables, compaction merges levels, reads check memtable then each level](figures/week10b-lsm-life.svg)
+![LSM tree lifecycle: writes to memtable, flush to L0 SSTables, compaction merges levels, reads check memtable then each level](figures/lsm-life.svg)
 *Figure 11.4: The LSM lifecycle. Writes are always sequential (append to memtable, flush to SSTable). Reads may check multiple levels. Compaction is the background tax that keeps the system healthy — and is the primary source of write amplification and tail-latency spikes in LSM-based stores.*
 
 LSM trees trade read amplification (checking multiple levels)
@@ -483,8 +483,8 @@ Key takeaways from this chapter:
   immutability, and erasure coding. It loses on latency and on
   the absence of in-place updates.
 - Every distributed write composes Chapter 4–10 mechanisms.
-  "Modern storage" is not new; it is the classical mechanisms at
-  scale.
+  "Modern storage" *is* classical mechanisms at scale; the
+  trace in §11.8 walks the assembly from keyboard to SSD.
 
 ## Further Reading
 

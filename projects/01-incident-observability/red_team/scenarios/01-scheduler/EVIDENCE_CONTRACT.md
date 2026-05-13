@@ -1,10 +1,10 @@
-# Evidence contract (MS baseline)
+# Evidence contract
 
 ## Supporting signal #1 (required)
 Example options:
 - increased `pidstat -w` context switches for victim PID
 - higher `/proc/schedstat` runnable delays (if available)
-- eBPF tracepoint: wakeup→run latency distribution (Week 4)
+- eBPF tracepoint: wakeup→run latency distribution (book Chapter 5)
 
 ## Supporting signal #2 (required)
 Example options:

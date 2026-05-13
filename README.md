@@ -5,7 +5,6 @@
 A free, open-source textbook for senior undergraduate and graduate CS students.
 
 📖 **Read online:** <https://daidong.github.io/mos-book/>
-📄 **Download PDF:** [book.pdf](book.pdf) (single-volume print edition)
 
 ---
 
@@ -82,7 +81,7 @@ to run experiments in a VM.
 
 | Chapter | Topic | Labs |
 |---------|-------|------|
-| 12 | [Agent Runtimes: A New Substrate for OS Thinking](src/part6-ai-era/ch12-agent-runtimes/index.md) | Lab E: Build an Agent Sandbox; Lab F: Profile and Optimize a ReAct Agent |
+| 12 | [Agent Runtimes: A New Substrate for OS Thinking](src/part6-ai-era/ch12-agent-runtimes/index.md) | Lab 12A: Build an Agent Sandbox; Lab 12B: Profile and Optimize a ReAct Agent |
 
 ### Appendices
 

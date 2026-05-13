@@ -54,8 +54,8 @@
 # Part VI: Operating Systems for the AI Era
 
 - [Chapter 12: Agent Runtimes — A New Substrate for OS Thinking](part6-ai-era/ch12-agent-runtimes/index.md)
-    - [Lab E: Build an Agent Sandbox](part6-ai-era/ch12-agent-runtimes/lab-agent-sandbox.md)
-    - [Lab F: Profile and Optimize a ReAct Agent](part6-ai-era/ch12-agent-runtimes/lab-react-perf.md)
+    - [Lab 12A: Build an Agent Sandbox](part6-ai-era/ch12-agent-runtimes/lab-agent-sandbox.md)
+    - [Lab 12B: Profile and Optimize a ReAct Agent](part6-ai-era/ch12-agent-runtimes/lab-react-perf.md)
 
 ---
 

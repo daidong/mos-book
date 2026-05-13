@@ -1,10 +1,14 @@
 # Project 01 — Blue Team Scaffold
 
-This folder is **optional scaffolding** for building a diagnosis workbench that can solve unknown incidents.
+This folder is **optional scaffolding** for building a diagnosis
+workbench that can solve unknown incidents.
 
-In this course, the *minimum* expected level is **MS baseline**:
-- each scenario must be solved with **2 independent signals + 1 negative control**, and
-- each mitigation must include **before/after p50/p95/p99** and **a mechanism-level metric** that moved.
+The standard for a complete diagnosis:
+
+- Each scenario solved with **two independent signals + one negative
+  control**.
+- Each mitigation includes **before/after p50 / p95 / p99** and **a
+  mechanism-level metric** that moved in the expected direction.
 
 ## Recommended workflow
 

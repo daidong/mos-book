@@ -1,6 +1,6 @@
-# Lab F — Profile and Optimize a ReAct Agent (Starter)
+# Lab 12B — Profile and Optimize a ReAct Agent (Starter)
 
-This directory is the starting point for **Lab F** of Chapter 12.
+This directory is the starting point for **Lab 12B** of Chapter 12.
 The lab walks you from a sequential ~150-LoC ReAct agent to a
 parallelized, timeout-protected, cache-aware agent. You measure
 the effect of each lever against the latency identity and write

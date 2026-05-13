@@ -5,9 +5,7 @@ This is a **Red/Blue** capstone project. Teams are **1–2 students** each.
 - **Red team (scenario authors):** build *diagnosable* incidents + scoring.
 - **Blue team (responders):** build an observability/diagnosis workflow that can solve unknown incidents.
 
-All teams must work within a **laptop + Ubuntu VM** budget and produce a reproducible artifact plus a report (60%) and oral defense/demo (40%).
-
-> **Baseline expectation (this course): MS level.**
+All teams work within a **laptop + Ubuntu VM** budget and produce a reproducible artifact plus a report (60%) and oral defense / demo (40%).
 
 ---
 
@@ -23,11 +21,13 @@ Connect **measurement → mechanism** under realistic constraints:
 
 ## Pairing and exchange formats
 
-When you pick this project, we will try to assign blue/red teams for you. If you have a strong preference, please note that in the Canvas submission.
+The instructor pairs Red and Blue teams. Teams may exchange scenarios
+or diagnosis workbenches according to whatever schedule the course
+adopts.
 
 ---
 
-## What you must deliver (MS baseline; both teams)
+## What you must deliver (both teams)
 
 - A runnable repo that can reproduce the incident(s) in a clean VM.
 - A **reproduction script** (one command) that:
@@ -37,9 +37,9 @@ When you pick this project, we will try to assign blue/red teams for you. If you
   4) outputs an artifact bundle (raw logs + metrics + plots).
 - Technical report (**60%**) + oral report/demo (**40%**).
 
-**For every scenario** (red-authored, blue-solved), the final writeup must include:
+**For every scenario** (Red-authored, Blue-solved), the final writeup must include:
 
-- **2 independent supporting signals** (signals from different observation layers) *plus* **1 negative control / exclusion** (alternative but wrongful explainations)
+- **2 independent supporting signals** from different observation layers, *plus* **1 negative control / exclusion** that rules out a plausible alternative explanation
 - **before/after p50/p95/p99** (or p50/p99 at minimum) *plus* **one mechanism-level metric that moved**
 
 ---
@@ -48,12 +48,15 @@ When you pick this project, we will try to assign blue/red teams for you. If you
 
 You will implement **3 scenarios**. They must collectively cover:
 
-1) **Scheduling / concurrency** (Week 3–4)
-   - examples: runqueue delay, noisy neighbor on same CPU, lock convoying
-2) **cgroup v2 resource boundary** (Week 5–6)
-   - examples: CPU quota throttling (`cpu.max`), memory limits (`memory.max`) → reclaim/OOM
-3) **Storage / writeback tail latency** (Week 8)
-   - examples: background `fsync` writer, writeback bursts, IO saturation
+1) **Scheduling / concurrency** (book Chapters 4–5)
+   - examples: runqueue delay, noisy neighbor on the same CPU, lock
+     convoying
+2) **cgroup v2 resource boundary** (book Chapters 6–7)
+   - examples: CPU quota throttling (`cpu.max`), memory limits
+     (`memory.max`) → reclaim or OOM
+3) **Storage / writeback tail latency** (book Chapter 10)
+   - examples: background `fsync` writer, writeback bursts, IO
+     saturation
 
 You still must follow the difficulty ladder:
 
@@ -70,7 +73,7 @@ Each scenario must include:
 - **Symptom spec:** what alert(s) fire; what the user sees (e.g., p99 latency spike, error rate).
 - **Ground truth:** a precise causal story tied to OS/runtime mechanisms.
 - **Injection mechanism:** scripts/configs to reliably trigger it in the VM.
-- **Evidence contract (MS baseline):**
+- **Evidence contract:**
   - **2 independent supporting signals** (VM-friendly)
   - **1 negative control / exclusion** (explicitly rule out a plausible alternative)
 - **Anti-guessing guardrails:** solvable using the evidence contract; avoid “magic outputs”.
@@ -98,7 +101,7 @@ Build a diagnosis workflow that can solve incidents you did not author:
   - a lightweight web dashboard
   - Prometheus/Grafana (only if you can keep it small)
 
-### Required case outcomes (MS baseline)
+### Required case outcomes
 
 For each of the 3 red-team scenarios:
 

@@ -14,7 +14,7 @@
   </defs>
 
   <rect width="1200" height="540" fill="#f8fafc"/>
-  <text x="40" y="42" class="title">The same Week 10A questions lead to very different designs</text>
+  <text x="40" y="42" class="title">The same storage-design questions lead to very different systems</text>
   <text x="40" y="70" class="subtitle">Different systems do not just differ in speed. They choose different places to pay for safety, scale, and operational simplicity.</text>
 
   <g filter="url(#shadow)">

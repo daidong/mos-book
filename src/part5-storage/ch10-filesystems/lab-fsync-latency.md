@@ -47,8 +47,8 @@ df -h /tmp                      # need ~1 GB free
 Create a working directory:
 
 ```bash
-mkdir -p ~/lab9/{data,results}
-cd ~/lab9
+mkdir -p ~/lab-fsync/{data,results}
+cd ~/lab-fsync
 ```
 
 ## Part A: File Layout Inspection (Required, 20 min)
@@ -56,7 +56,7 @@ cd ~/lab9
 ### A.1 Create test files
 
 ```bash
-cd ~/lab9/data
+cd ~/lab-fsync/data
 
 # A sequential file — should be nearly one extent
 dd if=/dev/zero of=sequential.dat bs=1M count=10
@@ -87,7 +87,7 @@ sequential case; fragmentation forced by random-offset writes).
 
 ```bash
 DEV=$(df / | tail -1 | awk '{print $1}')
-INO=$(ls -i ~/lab9/data/sequential.dat | awk '{print $1}')
+INO=$(ls -i ~/lab-fsync/data/sequential.dat | awk '{print $1}')
 sudo debugfs -R "stat <${INO}>" "${DEV}"
 ```
 
@@ -97,9 +97,9 @@ file size.
 ### A.4 Hard links
 
 ```bash
-ln ~/lab9/data/sequential.dat ~/lab9/data/seq_link.dat
-ls -i ~/lab9/data/sequential.dat ~/lab9/data/seq_link.dat
-stat ~/lab9/data/sequential.dat | grep Links
+ln ~/lab-fsync/data/sequential.dat ~/lab-fsync/data/seq_link.dat
+ls -i ~/lab-fsync/data/sequential.dat ~/lab-fsync/data/seq_link.dat
+stat ~/lab-fsync/data/sequential.dat | grep Links
 ```
 
 Both names share one inode; link count is 2. Explain in the
@@ -146,10 +146,10 @@ grep Dirty /proc/meminfo
 sync && sudo sysctl vm.drop_caches=3
 
 # Cold read
-time cat ~/lab9/data/sequential.dat > /dev/null
+time cat ~/lab-fsync/data/sequential.dat > /dev/null
 
 # Warm read
-time cat ~/lab9/data/sequential.dat > /dev/null
+time cat ~/lab-fsync/data/sequential.dat > /dev/null
 ```
 
 Record the cold-vs-warm ratio. Explain using Chapter 10 §10.3.
@@ -216,15 +216,15 @@ Between runs, drop caches to keep conditions comparable:
 ```bash
 # Buffered (no sync)
 sync && sudo sysctl vm.drop_caches=3
-./write_latency -n 10000 -c ~/lab9/results/baseline_buffered.csv /tmp/testfile
+./write_latency -n 10000 -c ~/lab-fsync/results/baseline_buffered.csv /tmp/testfile
 
 # fsync per write
 sync && sudo sysctl vm.drop_caches=3
-./write_latency -n 10000 -f -c ~/lab9/results/baseline_fsync.csv /tmp/testfile
+./write_latency -n 10000 -f -c ~/lab-fsync/results/baseline_fsync.csv /tmp/testfile
 
 # fdatasync per write
 sync && sudo sysctl vm.drop_caches=3
-./write_latency -n 10000 -d -c ~/lab9/results/baseline_fdatasync.csv /tmp/testfile
+./write_latency -n 10000 -d -c ~/lab-fsync/results/baseline_fdatasync.csv /tmp/testfile
 ```
 
 ### C.3 Fill the table
@@ -264,7 +264,7 @@ dd if=/dev/zero of=/tmp/bg_write bs=1M count=500 conv=fdatasync &
 BG=$!
 
 # Terminal 2 — measure
-./write_latency -n 10000 -f -c ~/lab9/results/interf_bg_io.csv /tmp/testfile
+./write_latency -n 10000 -f -c ~/lab-fsync/results/interf_bg_io.csv /tmp/testfile
 
 # Cleanup
 kill $BG 2>/dev/null; rm -f /tmp/bg_write
@@ -285,7 +285,7 @@ except MemoryError:
 " &
 MEM=$!
 
-./write_latency -n 5000 -f -c ~/lab9/results/interf_memory.csv /tmp/testfile
+./write_latency -n 5000 -f -c ~/lab-fsync/results/interf_memory.csv /tmp/testfile
 kill $MEM 2>/dev/null
 ```
 
@@ -298,7 +298,7 @@ for i in 1 2 3 4; do
   PIDS+=($!)
 done
 
-./write_latency -n 10000 -f -c ~/lab9/results/interf_concurrent.csv /tmp/testfile
+./write_latency -n 10000 -f -c ~/lab-fsync/results/interf_concurrent.csv /tmp/testfile
 
 for pid in "${PIDS[@]}"; do kill $pid 2>/dev/null; done
 rm -f /tmp/conc_*
@@ -310,7 +310,7 @@ rm -f /tmp/conc_*
 while true; do sync; sudo sysctl vm.drop_caches=3; sleep 2; done &
 DROP=$!
 
-./write_latency -n 5000 -f -c ~/lab9/results/interf_cold.csv /tmp/testfile
+./write_latency -n 5000 -f -c ~/lab-fsync/results/interf_cold.csv /tmp/testfile
 
 kill $DROP 2>/dev/null
 ```
@@ -358,17 +358,17 @@ with your application-level histogram.
 
 ## Deliverables
 
-Submit a `lab9/` directory:
+Submit a `lab-fsync/` directory:
 
 ```text
-lab9/
+lab-fsync/
 ├── write_latency.c
 ├── results/
 │   ├── baseline_buffered.csv
 │   ├── baseline_fsync.csv
 │   ├── baseline_fdatasync.csv
 │   └── interf_*.csv        (at least 2)
-└── lab9_report.md
+└── lab-fsync-report.md
 ```
 
 Your `report.md` must include:

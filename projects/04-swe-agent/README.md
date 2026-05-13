@@ -4,8 +4,6 @@ Treat a coding agent (default: **SWE-agent**) as a complex system: it is a pipel
 
 Team size **1–2**, duration **10 weeks**.
 
-> **Baseline expectation (this course): MS level.**
-
 ## Scope / constraints
 
 - Must run on **laptop + Ubuntu VM**.
@@ -53,7 +51,7 @@ Use **cgroup v2** to show how SWE-agent degrades under:
 
 You must provide an explanation tied to observed signals (not just “it got slower”).
 
-## Evidence standard (MS baseline)
+## Evidence standard
 For **each** interference experiment and mitigation, you must provide:
 
 1) **Two independent pieces of evidence (cross-layer observations)**

@@ -4,8 +4,6 @@ Profile an LLM inference stack as a **server workload** under realistic resource
 
 Team size **1–2**, duration **10 weeks**.
 
-> **Baseline expectation (this course): MS level.**
-
 ## Scope / constraints
 
 - **CPU-first** (do not assume GPUs).
@@ -43,7 +41,7 @@ You must include:
 1) **cgroup v2 CPU quota** experiment: show how throttling changes p99/TTFT and why.
 2) **cgroup v2 memory limit** experiment: show behavior under tight memory (reclaim, faults, possible OOM) and why.
 
-## Evidence standard (MS baseline)
+## Evidence standard
 
 For **each** interference experiment and mitigation, you must provide:
 

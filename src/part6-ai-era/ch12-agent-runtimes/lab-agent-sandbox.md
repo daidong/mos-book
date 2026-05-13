@@ -1,4 +1,4 @@
-# Lab E: Build an Agent Sandbox
+# Lab 12A: Build an Agent Sandbox
 
 > **Estimated time:** 6–8 hours
 >

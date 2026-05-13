@@ -4,8 +4,6 @@ Build a small **multi-hop** service and run it on a **local mini-Kubernetes** se
 
 Team size **1–2**, duration **10 weeks**, VM-friendly.
 
-> **Baseline expectation (this course): MS level.**
-
 ## Target stack
 
 - **Default:** kind (Kubernetes-in-Docker) on the VM
@@ -53,7 +51,7 @@ Examples:
 - storage writeback + fsync spikes → tail latency bursts
 - network impairment using `tc netem` (delay/loss) → retries / queue growth
 
-## Evidence standard (MS baseline)
+## Evidence standard
 
 For **each** interference experiment and mitigation, you must provide:
 

@@ -81,5 +81,5 @@
   </g>
 
   <text x="40" y="360" class="subtitle">Teaching point: “written” is not one event. It is a sequence of states with different failure assumptions.</text>
-  <text x="40" y="388" class="subtitle">Week 9 mostly lived on the left half. Week 10A moves the safety boundary to the quorum on the right.</text>
+  <text x="40" y="388" class="subtitle">Single-machine storage (Chapter 10) lived on the left half. Distributed storage moves the safety boundary to the quorum on the right.</text>
 </svg>

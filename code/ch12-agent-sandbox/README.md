@@ -1,12 +1,12 @@
 # Agent Sandbox - Starter Code
 
-This directory contains the starter code for Lab E: Minimal Agent Sandbox.
+This directory contains the starter code for Lab 12A: Minimal Agent Sandbox.
 
 ## Quick Start
 
 ```bash
-# Navigate to this directory
-cd week11/sandbox
+# Navigate to this directory (from the repository root)
+cd code/ch12-agent-sandbox
 
 # Create test data
 mkdir -p data output logs
